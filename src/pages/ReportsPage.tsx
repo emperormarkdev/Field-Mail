@@ -1,7 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CalendarRange, Download, FileText, Plus } from 'lucide-react';
+import {
+  RiAddLine,
+  RiCalendarEventLine,
+  RiCloseLine,
+  RiDownload2Line,
+  RiEditLine,
+  RiFileTextLine,
+  RiSearchLine,
+} from '@remixicon/react';
 import { db } from '../db/db';
 import { useSettings } from '../hooks/useSettings';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -16,7 +24,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { ListSkeleton } from '../components/ui/Skeleton';
 import { downloadBlob } from '../lib/backup';
 import { formatDate, formatDateTime, isoFromDate, plural, todayIso, truncate } from '../lib/format';
-import { buildSummaryPdfBlob, summaryPdfFilename } from '../lib/pdf';
+import { buildPdfBlob, buildSummaryPdfBlob, pdfFilename, summaryPdfFilename } from '../lib/pdf';
 import { cn } from '../lib/cn';
 import type { Report } from '../types';
 
@@ -24,18 +32,31 @@ type Filter = 'all' | 'waiting' | 'sent' | 'drafts' | 'failed';
 
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: 'all', label: 'All' },
-  { key: 'waiting', label: 'Waiting to send' },
+  { key: 'waiting', label: 'Waiting' },
   { key: 'sent', label: 'Sent' },
   { key: 'drafts', label: 'Drafts' },
   { key: 'failed', label: 'Not sent' },
 ];
 
-function matches(report: Report, filter: Filter): boolean {
+function matchesFilter(report: Report, filter: Filter): boolean {
   if (filter === 'all') return true;
   if (filter === 'waiting') return report.status === 'queued' || report.status === 'sending';
   if (filter === 'sent') return report.status === 'sent';
   if (filter === 'drafts') return report.status === 'draft';
   return report.status === 'failed';
+}
+
+function matchesSearch(report: Report, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (report.templateName.toLowerCase().includes(q)) return true;
+  if (report.siteName.toLowerCase().includes(q)) return true;
+  if (report.reportDate.includes(q)) return true;
+  for (const val of Object.values(report.values)) {
+    if (typeof val === 'string' && val.toLowerCase().includes(q)) return true;
+    if (Array.isArray(val) && val.some((item) => item.toLowerCase().includes(q))) return true;
+  }
+  return false;
 }
 
 function daysAgoIso(days: number): string {
@@ -48,8 +69,9 @@ export function ReportsPage() {
   const navigate = useNavigate();
   const { settings } = useSettings();
   const toast = useToast();
-  const split = useMediaQuery('(min-width: 768px)');
+  const split = useMediaQuery('(min-width: 1024px)');
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -68,10 +90,10 @@ export function ReportsPage() {
     const all = reports ?? [];
     return {
       all: all.length,
-      waiting: all.filter((r) => matches(r, 'waiting')).length,
-      sent: all.filter((r) => matches(r, 'sent')).length,
-      drafts: all.filter((r) => matches(r, 'drafts')).length,
-      failed: all.filter((r) => matches(r, 'failed')).length,
+      waiting: all.filter((r) => matchesFilter(r, 'waiting')).length,
+      sent: all.filter((r) => matchesFilter(r, 'sent')).length,
+      drafts: all.filter((r) => matchesFilter(r, 'drafts')).length,
+      failed: all.filter((r) => matchesFilter(r, 'failed')).length,
     };
   }, [reports]);
 
@@ -93,12 +115,33 @@ export function ReportsPage() {
     });
   }, [reports, startDate, endDate, siteFilter]);
 
-  const visible = (reports ?? []).filter((report) => matches(report, filter));
-  const selected = (reports ?? []).find((report) => report.id === selectedId) ?? null;
+  const visible = useMemo(
+    () =>
+      (reports ?? []).filter(
+        (report) => matchesFilter(report, filter) && matchesSearch(report, search),
+      ),
+    [reports, filter, search],
+  );
+
+  useEffect(() => {
+    if (!split) return;
+    if (visible.length > 0 && (!selectedId || !visible.some((r) => r.id === selectedId))) {
+      setSelectedId(visible[0].id);
+    }
+  }, [split, visible, selectedId]);
+
+  const selected = visible.find((report) => report.id === selectedId) ?? visible[0] ?? null;
 
   const open = (report: Report) => {
     if (split) setSelectedId(report.id);
     else navigate(`/reports/${report.id}`);
+  };
+
+  const downloadSinglePdf = async (report: Report) => {
+    if (!settings) return;
+    const photos = await db.photos.where('reportId').equals(report.id).toArray();
+    const blob = await buildPdfBlob({ report, photos, settings });
+    downloadBlob(blob, pdfFilename(report));
   };
 
   const handleDownloadSummary = async () => {
@@ -133,21 +176,22 @@ export function ReportsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-10 sm:px-6">
+    <div className="mx-auto w-full max-w-[1120px] px-4 pb-8 sm:px-6">
       <PageHeader
         title="Reports"
-        sticky={false}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <Button
               variant="secondary"
               onClick={() => setSummaryOpen(true)}
-              iconLeft={<CalendarRange aria-hidden className="size-4" />}
+              iconLeft={<RiCalendarEventLine aria-hidden className="size-4" />}
+              className="px-2.5 sm:px-3.5"
             >
-              Summary PDF
+              <span className="hidden sm:inline">Summary PDF</span>
+              <span className="sm:hidden">Summary</span>
             </Button>
-            <Link to="/new">
-              <Button variant="primary" iconLeft={<Plus aria-hidden className="size-4" />}>
+            <Link to="/new" className="hidden sm:inline-flex">
+              <Button variant="primary" iconLeft={<RiAddLine aria-hidden className="size-4" />}>
                 New report
               </Button>
             </Link>
@@ -155,119 +199,179 @@ export function ReportsPage() {
         }
       />
 
-      <div className="no-scrollbar -mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
-        {FILTERS.map((option) => (
-          <button
-            key={option.key}
-            type="button"
-            onClick={() => setFilter(option.key)}
-            aria-pressed={filter === option.key}
-            className={cn(
-              'press flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-chip border px-3 text-body-2-semibold',
-              filter === option.key
-                ? 'border-accent/40 bg-accent text-on-accent'
-                : 'border-line-strong bg-surface text-muted hover:bg-raised',
-            )}
-          >
-            {option.label}
-            <span className={cn('text-caption-1-medium', filter === option.key ? 'opacity-80' : 'opacity-60')}>
-              {counts[option.key]}
-            </span>
-          </button>
-        ))}
+      <div className="mb-3 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 sm:max-w-xs">
+          <RiSearchLine
+            aria-hidden
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+          />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search site, template, or notes…"
+            aria-label="Search reports"
+            className="h-9 w-full rounded-field border border-line-strong bg-surface ps-9 pe-8 text-body-2-regular text-ink placeholder:text-text-placeholder focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="absolute end-2 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded-full text-muted hover:text-ink"
+            >
+              <RiCloseLine aria-hidden className="size-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 sm:mx-0 sm:px-0">
+          {FILTERS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setFilter(option.key)}
+              aria-pressed={filter === option.key}
+              className={cn(
+                'press flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-chip border px-3 text-caption-1-semibold',
+                filter === option.key
+                  ? 'border-accent bg-accent text-on-accent'
+                  : 'border-line-strong bg-surface text-muted hover:bg-raised hover:text-ink',
+              )}
+            >
+              {option.label}
+              <span className={cn('text-caption-2-medium', filter === option.key ? 'opacity-85' : 'opacity-65')}>
+                {counts[option.key]}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className={cn(split && 'grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-5')}>
+      <div className={cn(split && 'grid grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-6 items-start')}>
         <div className="min-w-0">
           {reports === null ? (
             <ListSkeleton rows={4} />
           ) : visible.length === 0 ? (
             <EmptyState
-              icon={<FileText aria-hidden className="size-5" />}
+              icon={<RiFileTextLine aria-hidden className="size-5" />}
               title={
-                filter === 'all'
-                  ? 'No reports yet'
-                  : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()} reports`
+                search
+                  ? 'No matching reports'
+                  : filter === 'all'
+                    ? 'No reports yet'
+                    : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()} reports`
               }
             />
           ) : (
             <ul className="flex flex-col gap-2">
-              {visible.map((report) => (
-                <li
-                  key={report.id}
-                  className={cn(split && selectedId === report.id && 'rounded-card ring-2 ring-accent/40')}
-                >
-                  <div onClick={() => open(report)} className="cursor-pointer">
-                    <ReportCard report={report} compact={split} />
-                  </div>
-                </li>
-              ))}
+              {visible.map((report) => {
+                const isSelected = split && selected?.id === report.id;
+                return (
+                  <li
+                    key={report.id}
+                    className={cn(
+                      'rounded-card transition-shadow',
+                      isSelected && 'ring-2 ring-accent',
+                    )}
+                  >
+                    <div
+                      onClick={(event) => {
+                        if (split) {
+                          event.preventDefault();
+                          open(report);
+                        }
+                      }}
+                    >
+                      <ReportCard report={report} compact={split} />
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
 
-        {split && (
-          <aside className="min-w-0" aria-label="Report summary">
-            {selected ? (
-              <div className="sticky top-4 rounded-card border border-line bg-surface p-5 shadow-card">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-caption-1-semibold uppercase text-muted">
-                      {formatDate(selected.reportDate)}
-                    </p>
-                    <h2 className="mt-1 text-headline-semibold text-ink">
-                      {selected.templateName}
-                    </h2>
-                  </div>
-                  <StatusBadge status={selected.status} />
+        {split && selected && (
+          <aside className="sticky top-4 min-w-0" aria-label="Report details">
+            <div className="rounded-card border border-line bg-surface p-5 shadow-card">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-caption-1-semibold uppercase text-muted">
+                    {formatDate(selected.reportDate)}
+                  </p>
+                  <h2 className="mt-0.5 text-headline-semibold text-ink">
+                    {selected.templateName}
+                  </h2>
+                  <p className="mt-0.5 text-body-2-regular text-muted">
+                    {selected.siteName || 'No site named'}
+                  </p>
                 </div>
-                <p className="mt-1.5 text-body-regular text-muted">{selected.siteName || 'No site named'}</p>
+                <StatusBadge status={selected.status} />
+              </div>
 
-                <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4">
-                  {selected.templateSnapshot.fields
-                    .filter((field) => field.type !== 'photo')
-                    .slice(0, 8)
-                    .map((field) => {
-                      const value = selected.values[field.id];
-                      if (value == null || (Array.isArray(value) && !value.length)) return null;
-                      return (
-                        <div key={field.id} className="min-w-0">
-                          <dt className="text-caption-1-medium text-muted">{field.label}</dt>
-                          <dd className="mt-0.5 break-words text-body-regular text-ink">
-                            {truncate(Array.isArray(value) ? value.join(', ') : String(value), 90)}
-                          </dd>
-                        </div>
-                      );
-                    })}
-                </dl>
-
-                <p className="mt-4 border-t border-line pt-3 text-caption-1-regular text-muted">
-                  {selected.sentAt
-                    ? `Sent ${formatDateTime(selected.sentAt)}`
-                    : `Updated ${formatDateTime(selected.updatedAt)}`}
-                  {selected.partCount && selected.partCount > 1
-                    ? ` · ${selected.partCount} ${plural(selected.partCount, 'email')}`
-                    : ''}
-                </p>
-
-                <div className="mt-4">
+              <div className="mt-4 flex flex-wrap gap-2 border-y border-line py-3">
+                {selected.status === 'draft' ? (
                   <Button
                     variant="primary"
-                    fullWidth
+                    onClick={() => navigate(`/reports/${selected.id}/edit`)}
+                    iconLeft={<RiEditLine aria-hidden className="size-4" />}
+                  >
+                    Continue editing
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
                     onClick={() => navigate(`/reports/${selected.id}`)}
                   >
                     Open full report
                   </Button>
-                </div>
+                )}
+                <Button
+                  variant="secondary"
+                  onClick={() => void downloadSinglePdf(selected)}
+                  iconLeft={<RiDownload2Line aria-hidden className="size-4" />}
+                >
+                  Download PDF
+                </Button>
+                {selected.status === 'draft' && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate(`/reports/${selected.id}`)}
+                  >
+                    Details
+                  </Button>
+                )}
               </div>
-            ) : (
-              <div className="sticky top-4 flex min-h-60 flex-col items-center justify-center rounded-card border border-dashed border-line-strong bg-surface/50 p-6 text-center">
-                <FileText aria-hidden className="size-5 text-muted" />
-                <p className="mt-2.5 text-body-medium text-muted">
-                  Select a report to view summary
-                </p>
-              </div>
-            )}
+
+              <dl className="mt-4 flex flex-col gap-3">
+                {selected.templateSnapshot.fields
+                  .filter((field) => field.type !== 'photo')
+                  .map((field) => {
+                    const value = selected.values[field.id];
+                    if (value == null || (Array.isArray(value) && !value.length)) return null;
+                    const str = Array.isArray(value) ? value.join(', ') : String(value);
+                    if (!str.trim()) return null;
+                    return (
+                      <div key={field.id} className="min-w-0 border-b border-line pb-2.5 last:border-b-0 last:pb-0">
+                        <dt className="text-caption-1-semibold uppercase text-muted">{field.label}</dt>
+                        <dd className="mt-0.5 whitespace-pre-wrap break-words text-body-2-regular text-ink">
+                          {truncate(str, 240)}
+                        </dd>
+                      </div>
+                    );
+                  })}
+              </dl>
+
+              <p className="mt-4 border-t border-line pt-3 text-caption-1-regular text-muted">
+                {selected.sentAt
+                  ? `Sent ${formatDateTime(selected.sentAt)}`
+                  : `Last saved ${formatDateTime(selected.updatedAt)}`}
+                {selected.partCount && selected.partCount > 1
+                  ? ` · ${selected.partCount} ${plural(selected.partCount, 'email')}`
+                  : ''}
+              </p>
+            </div>
           </aside>
         )}
       </div>
@@ -288,7 +392,7 @@ export function ReportsPage() {
               loading={buildingSummary}
               disabled={summaryReports.length === 0}
               onClick={() => void handleDownloadSummary()}
-              iconLeft={<Download aria-hidden className="size-4" />}
+              iconLeft={<RiDownload2Line aria-hidden className="size-4" />}
             >
               Download Summary PDF ({summaryReports.length})
             </Button>

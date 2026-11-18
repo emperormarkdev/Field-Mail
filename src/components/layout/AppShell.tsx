@@ -21,8 +21,8 @@ export function AppShell() {
         <SideNav />
         <div
           className={cn(
-            'lg:ps-60',
-            editing ? '' : 'pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:pb-0',
+            'lg:ps-64',
+            editing ? '' : 'pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0',
           )}
         >
           <UpdatePrompt />

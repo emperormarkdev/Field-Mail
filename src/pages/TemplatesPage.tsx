@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Copy, LayoutTemplate, Pencil, Plus, Trash2 } from 'lucide-react';
 import { db } from '../db/db';
@@ -45,10 +45,9 @@ export function TemplatesPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-10 sm:px-6">
+    <div className="mx-auto w-full max-w-[1120px] px-4 pb-8 sm:px-6">
       <PageHeader
         title="Templates"
-        sticky={false}
         actions={
           <Button
             variant="primary"
@@ -74,29 +73,40 @@ export function TemplatesPage() {
           }
         />
       ) : (
-        <ul className="flex flex-col gap-2.5">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {templates.map((template) => (
             <li key={template.id}>
-              <Card className="p-4">
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/templates/${template.id}`)}
-                    className="min-w-0 flex-1 cursor-pointer text-start"
-                  >
-                    <span className="block text-body-semibold text-ink">
-                      {template.name}
-                    </span>
-                    {template.description && (
-                      <span className="mt-0.5 block text-body-2-regular text-muted">
-                        {template.description}
+              <Card className="flex h-full flex-col justify-between p-4">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/templates/${template.id}`)}
+                      className="min-w-0 flex-1 cursor-pointer text-start"
+                    >
+                      <span className="block text-body-semibold text-ink hover:text-accent">
+                        {template.name}
                       </span>
-                    )}
-                    <span className="mt-2 block text-caption-1-medium text-muted">
+                    </button>
+                    <span className="shrink-0 rounded-full bg-raised px-2 py-0.5 text-caption-2-medium text-muted">
                       {template.fields.length} {plural(template.fields.length, 'field')}
                     </span>
-                  </button>
-                  <div className="flex shrink-0 items-center gap-1">
+                  </div>
+                  {template.description && (
+                    <p className="mt-1 line-clamp-2 text-body-2-regular text-muted">
+                      {template.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
+                  <Link
+                    to={`/reports/new/${template.id}`}
+                    className="press inline-flex h-8 items-center rounded-lg bg-accent-soft px-3 text-caption-1-semibold text-accent hover:bg-accent hover:text-white"
+                  >
+                    Write report
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <IconButton
                       label={`Edit ${template.name}`}
                       size="sm"

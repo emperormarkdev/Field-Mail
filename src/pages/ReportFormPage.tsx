@@ -435,7 +435,7 @@ export function ReportFormPage() {
   if (notFound) {
     return (
       <div className="mx-auto w-full max-w-[1120px] px-4 pb-10 sm:px-6">
-        <PageHeader title="Not found" backTo="/" sticky={false} />
+        <PageHeader title="Not found" backTo="/" />
         <EmptyState
           icon={<FileWarning aria-hidden className="size-5" />}
           title="Template or report not found"
@@ -453,7 +453,7 @@ export function ReportFormPage() {
   if (!report) {
     return (
       <div className="mx-auto w-full max-w-[1120px] px-4 pb-10 sm:px-6">
-        <PageHeader title="Loading report" backTo="/" sticky={false} />
+        <PageHeader title="Loading report" backTo="/" />
         <div className="flex flex-col gap-3">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-10 w-2/5" />
@@ -468,47 +468,46 @@ export function ReportFormPage() {
       <PageHeader
         title={report.templateName}
         backTo={id ? `/reports/${id}` : '/'}
-        sticky={false}
         actions={
           !wide ? (
             <Button
               variant="secondary"
               onClick={() => setPreviewSheetOpen(true)}
               iconLeft={<Eye aria-hidden className="size-4" />}
+              className="px-2.5 sm:px-3.5"
             >
-              Preview PDF
+              <span className="hidden sm:inline">Preview PDF</span>
+              <span className="sm:hidden">PDF</span>
             </Button>
           ) : undefined
         }
       />
 
       {!locked && previousReport && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-surface px-4 py-2.5 shadow-card">
-          <p className="text-body-2-regular text-muted">
-            Want to reuse details from your last{' '}
-            <strong className="font-semibold text-ink">{report.templateName}</strong> (
-            {formatDate(previousReport.reportDate)})?
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-card border border-line bg-surface px-3.5 py-2.5 shadow-card">
+          <p className="text-caption-1-regular text-muted sm:text-body-2-regular">
+            Reuse details from your last report ({formatDate(previousReport.reportDate)})?
           </p>
           <Button
             variant="secondary"
             onClick={copyFromPrevious}
             iconLeft={<Copy aria-hidden className="size-3.5" />}
-            className="min-h-8 px-2.5 text-body-2-semibold"
+            className="min-h-8 px-2.5 text-caption-1-semibold"
           >
-            Copy from last report
+            Copy last report
           </Button>
         </div>
       )}
 
       {locked && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-card border border-accent/30 bg-accent-soft p-3 text-body-2-medium text-accent">
+        <div className="mb-3 flex items-start gap-2.5 rounded-card border border-accent/30 bg-accent-soft p-3 text-body-2-medium text-accent">
           <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
           <p>This report has already been sent or is waiting to send, so editing is locked.</p>
         </div>
       )}
 
       {Object.keys(errors).length > 0 && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-card border border-danger/30 bg-danger-soft p-3 text-body-2-medium text-danger">
+        <div className="mb-3 flex items-start gap-2.5 rounded-card border border-danger/30 bg-danger-soft p-3 text-body-2-medium text-danger">
           <FileWarning aria-hidden className="mt-0.5 size-4 shrink-0" />
           <p>
             Please fill in the {Object.keys(errors).length} highlighted{' '}
@@ -517,62 +516,60 @@ export function ReportFormPage() {
         </div>
       )}
 
-      <div className={cn(wide && 'grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] gap-6')}>
+      <div className={cn(wide && 'grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] gap-6 items-start')}>
         <div className="min-w-0">
-          <div className="flex flex-col gap-4">
-            <div className="rounded-card border border-line bg-surface p-4 shadow-card sm:p-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div id="site-name" className="scroll-mt-24">
-                  <Field
-                    label="Site name"
-                    htmlFor="report-site"
-                    required
-                    error={errors.siteName}
-                  >
-                    <Input
-                      id="report-site"
-                      value={report.siteName}
-                      disabled={locked}
-                      list="site-suggestions"
-                      onChange={(event) =>
-                        patch((current) => ({ ...current, siteName: event.target.value }))
-                      }
-                      onBlur={() => {
-                        void saveNow();
-                        const site = reportRef.current?.siteName?.trim();
-                        if (site) void updateSettings({ lastSiteName: site });
-                      }}
-                      placeholder="Site or project name"
-                    />
-                    <datalist id="site-suggestions">
-                      {[settings?.lastSiteName, settings?.defaultSiteName]
-                        .filter((value): value is string => !!value)
-                        .map((value, index) => (
-                          <option key={`${value}-${index}`} value={value} />
-                        ))}
-                    </datalist>
-                  </Field>
-                </div>
-                <Field label="Report date" htmlFor="report-date" required>
+          <div className="rounded-card border border-line bg-surface shadow-card divide-y divide-line">
+            <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+              <div id="site-name" className="scroll-mt-24">
+                <Field
+                  label="Site name"
+                  htmlFor="report-site"
+                  required
+                  error={errors.siteName}
+                >
                   <Input
-                    id="report-date"
-                    type="date"
-                    value={report.reportDate}
+                    id="report-site"
+                    value={report.siteName}
                     disabled={locked}
+                    list="site-suggestions"
                     onChange={(event) =>
-                      patch((current) => ({ ...current, reportDate: event.target.value }))
+                      patch((current) => ({ ...current, siteName: event.target.value }))
                     }
-                    onBlur={() => void saveNow()}
+                    onBlur={() => {
+                      void saveNow();
+                      const site = reportRef.current?.siteName?.trim();
+                      if (site) void updateSettings({ lastSiteName: site });
+                    }}
+                    placeholder="Site or project name"
                   />
+                  <datalist id="site-suggestions">
+                    {[settings?.lastSiteName, settings?.defaultSiteName]
+                      .filter((value): value is string => !!value)
+                      .map((value, index) => (
+                        <option key={`${value}-${index}`} value={value} />
+                      ))}
+                  </datalist>
                 </Field>
               </div>
+              <Field label="Report date" htmlFor="report-date" required>
+                <Input
+                  id="report-date"
+                  type="date"
+                  value={report.reportDate}
+                  disabled={locked}
+                  onChange={(event) =>
+                    patch((current) => ({ ...current, reportDate: event.target.value }))
+                  }
+                  onBlur={() => void saveNow()}
+                />
+              </Field>
             </div>
 
             {fields.map((field) => (
               <div
                 key={field.id}
                 id={`field-wrapper-${field.id}`}
-                className="scroll-mt-24 rounded-card border border-line bg-surface p-4 shadow-card sm:p-5"
+                className="scroll-mt-24 p-4 sm:p-5"
               >
                 <FieldControl
                   field={field}
@@ -596,13 +593,13 @@ export function ReportFormPage() {
             ))}
 
             {fields.length === 0 && (
-              <p className="rounded-card border border-dashed border-line-strong p-6 text-center text-body-2-regular text-muted">
+              <p className="p-6 text-center text-body-2-regular text-muted">
                 This template has no fields yet.
               </p>
             )}
           </div>
 
-          <div className="sticky bottom-0 z-20 -mx-4 mt-6 border-t border-line bg-surface/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:-mx-6 sm:px-6">
+          <div className="sticky bottom-0 z-20 -mx-4 mt-5 border-t border-line bg-surface/95 px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:-mx-6 sm:px-6">
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
@@ -631,8 +628,8 @@ export function ReportFormPage() {
         </div>
 
         {wide && (
-          <aside className="min-w-0" aria-label="PDF preview">
-            <div className="sticky top-4 rounded-card border border-line bg-surface p-3 shadow-card">
+          <aside className="sticky top-4 min-w-0" aria-label="PDF preview">
+            <div className="rounded-card border border-line bg-surface p-3 shadow-card">
               <div className="mb-2 flex items-center justify-between gap-2 px-1">
                 <p className="text-body-2-semibold text-ink">Printable PDF preview</p>
                 <button
@@ -648,10 +645,10 @@ export function ReportFormPage() {
                 <iframe
                   title="Report PDF preview"
                   src={previewUrl}
-                  className="h-[calc(100dvh-8rem)] min-h-[32rem] w-full rounded-field border border-line bg-white"
+                  className="h-[calc(100dvh-7rem)] min-h-[32rem] w-full rounded-field border border-line bg-white"
                 />
               ) : (
-                <div className="flex h-[calc(100dvh-8rem)] min-h-[32rem] flex-col items-center justify-center gap-2 rounded-field border border-line bg-raised text-muted">
+                <div className="flex h-[calc(100dvh-7rem)] min-h-[32rem] flex-col items-center justify-center gap-2 rounded-field border border-line bg-raised text-muted">
                   <FileText aria-hidden className="size-5" />
                   <p className="text-body-2-regular">Preparing printable PDF…</p>
                 </div>

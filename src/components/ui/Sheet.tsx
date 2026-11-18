@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { RiCloseLine } from '@remixicon/react';
 import { cn } from '../../lib/cn';
 
 const FOCUSABLE =
@@ -73,13 +73,13 @@ export function Sheet({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
       <button
         type="button"
         aria-label="Close"
         tabIndex={-1}
         onClick={onClose}
-        className="animate-fade-in absolute inset-0 bg-black/45 backdrop-blur-[1px]"
+        className="animate-fade-in absolute inset-0 bg-black/50 backdrop-blur-[2px]"
       />
       <div
         ref={panelRef}
@@ -89,18 +89,22 @@ export function Sheet({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          'animate-rise relative flex max-h-[92dvh] w-full flex-col overflow-hidden border border-line bg-surface shadow-2xl',
-          'rounded-t-card sm:rounded-card',
+          'animate-rise relative flex max-h-[92dvh] w-full flex-col overflow-hidden border border-line bg-surface shadow-2xl outline-none',
+          'rounded-t-3xl sm:rounded-2xl',
           size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg',
         )}
       >
-        <div className="flex items-start gap-3 border-b border-line px-4 py-4 sm:px-5">
+        <div className="flex justify-center pt-2.5 pb-0.5 sm:hidden" aria-hidden>
+          <span className="h-1.5 w-10 rounded-full bg-border-button-default" />
+        </div>
+
+        <div className="flex items-start gap-3 border-b border-line px-4 py-3.5 sm:px-5 sm:py-4">
           <div className="min-w-0 flex-1">
-            <h2 id={titleId} className="text-title font-semibold text-ink">
+            <h2 id={titleId} className="text-headline-semibold text-ink">
               {title}
             </h2>
             {description && (
-              <p id={descriptionId} className="mt-1 text-[0.875rem] leading-snug text-muted">
+              <p id={descriptionId} className="mt-0.5 text-body-2-regular text-muted">
                 {description}
               </p>
             )}
@@ -109,16 +113,16 @@ export function Sheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="press -mr-1 -mt-1 grid size-11 shrink-0 place-items-center rounded-field text-muted hover:bg-raised"
+            className="press -me-1 -mt-0.5 grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-background-secondary-default text-text-secondary hover:text-text-primary"
           >
-            <X aria-hidden className="size-5" />
+            <RiCloseLine aria-hidden className="size-4.5" />
           </button>
         </div>
 
         <div className="scroll-area flex-1 px-4 py-4 sm:px-5">{children}</div>
 
         {footer && (
-          <div className="border-t border-line bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+          <div className="border-t border-line bg-surface px-4 pt-3 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:px-5">
             {footer}
           </div>
         )}
