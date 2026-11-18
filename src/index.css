@@ -1,0 +1,174 @@
+@import '@fontsource-variable/inter/index.css';
+@import './styles/globals.css';
+
+@theme inline {
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--color-background-primary-default);
+  --color-raised: var(--color-background-secondary-default);
+  --color-line: var(--color-separator-border);
+  --color-line-strong: var(--color-border-button-default);
+  --color-ink: var(--color-text-primary);
+  --color-muted: var(--color-text-secondary);
+  --color-accent: var(--c-accent);
+  --color-accent-hover: var(--c-accent-hover);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-on-accent: var(--c-on-accent);
+  --color-danger: var(--color-text-error-primary);
+  --color-danger-soft: var(--color-background-tertiary-error);
+  --color-warn: var(--color-status-orange-text);
+  --color-warn-soft: var(--color-status-orange-background);
+  --color-ok: var(--color-state-success-text);
+  --color-ok-soft: var(--color-state-success-base);
+}
+
+@theme {
+  --radius-card: 0.75rem;
+  --radius-field: 0.5rem;
+  --radius-chip: 999px;
+
+  --text-hero: 1.5rem;
+  --text-hero--line-height: 2rem;
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.625rem;
+  --text-body: 0.875rem;
+}
+
+:root {
+  --font-inter: 'Inter Variable';
+
+  --c-canvas: var(--color-neutral-100);
+  --c-accent: var(--color-blue-600);
+  --c-accent-hover: var(--color-blue-700);
+  --c-accent-soft: var(--color-blue-50);
+  --c-on-accent: var(--color-white);
+}
+
+.dark {
+  --c-canvas: var(--color-background-full);
+  --c-accent: var(--color-blue-500);
+  --c-accent-hover: var(--color-blue-400);
+  --c-accent-soft: color-mix(in srgb, var(--color-blue-900) 40%, transparent);
+  --c-on-accent: var(--color-white);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-family: var(--font-sans);
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+  }
+
+  button,
+  [role='button'] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+  }
+
+  ::selection {
+    background: var(--c-accent-soft);
+    color: var(--color-text-primary);
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .pt-safe {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+
+  .px-safe {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+
+  .scroll-area {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .press {
+    transition:
+      transform 90ms ease,
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .press:active {
+    transform: scale(0.99);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .press,
+    .press:active {
+      transition: none;
+      transform: none;
+    }
+  }
+}
+
+@keyframes sr-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sr-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sr-shimmer {
+  0% { opacity: 0.55; }
+  50% { opacity: 0.95; }
+  100% { opacity: 0.55; }
+}
+
+.animate-fade-in { animation: sr-fade-in 150ms ease-out both; }
+.animate-rise { animation: sr-rise 180ms cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+
+.skeleton {
+  @apply bg-line;
+  animation: sr-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-rise,
+  .skeleton {
+    animation: none;
+  }
+}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Fieldmail">
+  <defs>
+    <linearGradient id="fm-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#fm-bg)"/>
+  <rect x="140" y="90" width="232" height="220" rx="30" fill="#dbeafe"/>
+  <rect x="178" y="135" width="102" height="24" rx="12" fill="#1d4ed8"/>
+  <rect x="178" y="182" width="156" height="24" rx="12" fill="#2563eb"/>
+  <path d="M88 214C88 202.95 96.95 194 108 194H404C415.05 194 424 202.95 424 214V378C424 399 407 416 386 416H126C105 416 88 399 88 378V214Z" fill="#ffffff"/>
+  <path d="M98 206L256 312L414 206" fill="none" stroke="#2563eb" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

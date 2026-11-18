@@ -1,0 +1,206 @@
+@import "tailwindcss";
+@import "./theme.css";
+@import "./typography.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant rtl (&:dir(rtl));
+@custom-variant ltr (&:dir(ltr));
+
+:root {
+  color-scheme: light dark;
+
+  &:has(> head > meta[name="color-scheme"][content="dark"]) {
+    color-scheme: dark;
+  }
+  &:has(> head > meta[name="color-scheme"][content="light"]) {
+    color-scheme: light;
+  }
+}
+
+html,
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-ligatures: contextual;
+  font-kerning: normal;
+}
+
+html {
+  background-color: var(--color-background-full);
+}
+
+body {
+  background-color: var(--color-background-full);
+  color: var(--color-text-primary);
+}
+
+@utility shadow-2xs {
+  &:where(.dark .shadow-2xs) {
+    --tw-shadow: var(--shadow-2xs);
+  }
+}
+@utility shadow-xs {
+  &:where(.dark .shadow-xs) {
+    --tw-shadow: var(--shadow-xs);
+  }
+}
+@utility shadow-sm {
+  &:where(.dark .shadow-sm) {
+    --tw-shadow: var(--shadow-sm);
+  }
+}
+@utility shadow-md {
+  &:where(.dark .shadow-md) {
+    --tw-shadow: var(--shadow-md);
+  }
+}
+@utility shadow-lg {
+  &:where(.dark .shadow-lg) {
+    --tw-shadow: var(--shadow-lg);
+  }
+}
+@utility shadow-xl {
+  &:where(.dark .shadow-xl) {
+    --tw-shadow: var(--shadow-xl);
+  }
+}
+@utility shadow-card {
+  &:where(.dark .shadow-card) {
+    --tw-shadow: var(--shadow-card);
+  }
+}
+@utility shadow-dropdown {
+  &:where(.dark .shadow-dropdown) {
+    --tw-shadow: var(--shadow-dropdown);
+  }
+}
+@utility shadow-sidebar {
+  &:where(.dark .shadow-sidebar) {
+    --tw-shadow: var(--shadow-sidebar);
+  }
+}
+
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.animate-check-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: check-draw 200ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-check-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+.bui-table {
+  @apply w-full border-collapse text-start;
+}
+.bui-table th {
+  @apply px-3 py-2.5 text-start align-middle text-body-medium text-text-tertiary whitespace-nowrap outline-none;
+  background-color: var(--color-background-secondary-default);
+  border-top: 1px solid var(--color-separator-border);
+  border-bottom: 1px solid var(--color-separator-border);
+}
+.bui-table td {
+  @apply px-3 py-2.5 align-middle text-body-medium text-text-primary outline-none;
+}
+.bui-table tbody tr:not(:last-child) {
+  border-bottom: 1px solid var(--color-separator-border);
+}
+.bui-table tbody tr {
+  @apply transition-colors duration-150;
+}
+.bui-table tbody tr[data-focus-visible] {
+  @apply ring-2 ring-inset ring-border-focus-ring;
+}
+.bui-table.bui-table-sm th,
+.bui-table.bui-table-sm td {
+  @apply px-2.5 py-1.5 text-body-2-medium;
+}
+
+.bui-skeleton {
+  --bui-skeleton-sheen: rgb(255 255 255 / 0.75);
+  overflow: hidden;
+  isolation: isolate;
+  container-type: inline-size;
+}
+
+.dark .bui-skeleton {
+  --bui-skeleton-sheen: rgb(255 255 255 / 0.075);
+}
+
+.bui-skeleton::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 600px;
+  background: linear-gradient(
+    90deg in oklab,
+    transparent 0%,
+    color-mix(in oklab, var(--bui-skeleton-sheen) 30%, transparent) 25%,
+    var(--bui-skeleton-sheen) 50%,
+    color-mix(in oklab, var(--bui-skeleton-sheen) 30%, transparent) 75%,
+    transparent 100%
+  );
+  translate: -600px 0;
+  animation: bui-skeleton-sheen 1.9s linear infinite;
+  will-change: translate;
+}
+
+@keyframes bui-skeleton-sheen {
+  from {
+    translate: -600px 0;
+  }
+  to {
+    translate: max(100cqw, 640px) 0;
+  }
+}
+
+@keyframes bui-skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bui-skeleton::after {
+    display: none;
+  }
+  .bui-skeleton {
+    animation: bui-skeleton-pulse 2s ease-in-out infinite;
+  }
+}
