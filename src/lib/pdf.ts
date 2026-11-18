@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import type { Field, LogoAlignment, Report, Settings, StoredPhoto } from '../types';
-import { formatLongDate } from './format';
+import { formatDate, formatLongDate } from './format';
 import { readAsDataUrl } from './photos';
 
 const PAGE_W = 210;
@@ -424,4 +424,236 @@ export function pdfFilename(report: Report, part?: { index: number; count: numbe
   const name = report.templateName.replace(/[^\w\-]+/g, '-').replace(/-+/g, '-');
   const suffix = part && part.count > 1 ? `-part${part.index + 1}` : '';
   return `${name}-${site}-${report.reportDate}${suffix}.pdf`;
+}
+
+export interface SummaryPdfInput {
+  reports: Report[];
+  settings: Settings;
+  startDate: string;
+  endDate: string;
+  siteFilter?: string;
+}
+
+export async function buildSummaryPdfBlob(input: SummaryPdfInput): Promise<Blob> {
+  const { reports, settings, startDate, endDate, siteFilter } = input;
+  const sorted = [...reports].sort((a, b) =>
+    a.reportDate === b.reportDate
+      ? a.createdAt - b.createdAt
+      : a.reportDate.localeCompare(b.reportDate),
+  );
+
+  let logo: { dataUrl: string; width: number; height: number } | null = null;
+  if (settings.branding.logoDataUrl) {
+    const dims = await imageSize(settings.branding.logoDataUrl);
+    logo = { dataUrl: settings.branding.logoDataUrl, ...dims };
+  }
+
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  const periodLabel = `${formatDate(startDate)} – ${formatDate(endDate)}`;
+  const siteLabel = siteFilter?.trim() || 'All sites';
+
+  doc.setProperties({
+    title: `Site Summary Report — ${siteLabel} (${periodLabel})`,
+    subject: 'Site Summary Report',
+    author: settings.myName || settings.gmail || 'Fieldmail',
+  });
+
+  let y = MARGIN;
+  const brand = settings.branding.companyName.trim();
+  const align: LogoAlignment = settings.branding.logoAlign ?? 'left';
+
+  let logoW = 0;
+  let logoH = 0;
+  if (logo) {
+    const maxW = 40;
+    const maxH = 16;
+    const ratio = logo.height / logo.width;
+    logoW = maxW;
+    logoH = logoW * ratio;
+    if (logoH > maxH) {
+      logoH = maxH;
+      logoW = logoH / ratio;
+    }
+  }
+
+  if (align === 'center') {
+    if (logo) {
+      doc.addImage(logo.dataUrl, 'JPEG', MARGIN + (CONTENT_W - logoW) / 2, y, logoW, logoH);
+      y += logoH + 4;
+    }
+    if (brand) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...DARK_GREY);
+      doc.text(brand.toUpperCase(), PAGE_W / 2, y + 3, { align: 'center' });
+      y += 6;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...BLACK);
+    doc.text('SITE SUMMARY REPORT', PAGE_W / 2, y + 4, { align: 'center' });
+    y += 10.5;
+  } else if (align === 'left') {
+    if (logo) {
+      doc.addImage(logo.dataUrl, 'JPEG', MARGIN, y, logoW, logoH);
+      y += logoH + 4;
+    }
+    if (brand) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...DARK_GREY);
+      doc.text(brand.toUpperCase(), MARGIN, y + 3);
+      y += 5.5;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...BLACK);
+    doc.text('SITE SUMMARY REPORT', MARGIN, y + 4);
+    y += 10.5;
+  } else {
+    const startY = y;
+    if (logo) {
+      doc.addImage(logo.dataUrl, 'JPEG', MARGIN + CONTENT_W - logoW, startY, logoW, logoH);
+    }
+    if (brand) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...DARK_GREY);
+      doc.text(brand.toUpperCase(), MARGIN, y + 3);
+      y += 5.5;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...BLACK);
+    doc.text('SITE SUMMARY REPORT', MARGIN, y + 4);
+    y += 10.5;
+    if (logo) y = Math.max(y, startY + logoH + 4);
+  }
+
+  doc.setDrawColor(...BLACK);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y, MARGIN + CONTENT_W, y);
+  y += 5;
+
+  // Summary metadata grid
+  const preparedBy = settings.myName.trim() || settings.gmail.trim() || '—';
+  const metaRows: Array<[string, string, string, string]> = [
+    ['Site / Location', siteLabel, 'Period', periodLabel],
+    ['Prepared by', preparedBy, 'Total Reports', `${sorted.length}`],
+  ];
+  const rowH = 7.5;
+  const col1LabelW = 30;
+  const col1ValW = CONTENT_W / 2 - col1LabelW;
+  const col2LabelW = 28;
+  const col2ValW = CONTENT_W / 2 - col2LabelW;
+  const midX = MARGIN + CONTENT_W / 2;
+
+  doc.setDrawColor(...BORDER_GREY);
+  doc.setLineWidth(0.25);
+
+  for (const [l1, v1, l2, v2] of metaRows) {
+    doc.setFillColor(...LIGHT_FILL);
+    doc.rect(MARGIN, y, col1LabelW, rowH, 'F');
+    doc.rect(midX, y, col2LabelW, rowH, 'F');
+    doc.rect(MARGIN, y, CONTENT_W, rowH, 'S');
+    doc.line(MARGIN + col1LabelW, y, MARGIN + col1LabelW, y + rowH);
+    doc.line(midX, y, midX, y + rowH);
+    doc.line(midX + col2LabelW, y, midX + col2LabelW, y + rowH);
+
+    const textY = y + 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...DARK_GREY);
+    doc.text(l1, MARGIN + 2.5, textY);
+    doc.text(l2, midX + 2.5, textY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...BLACK);
+    doc.text((doc.splitTextToSize(v1, col1ValW - 5) as string[])[0] ?? '', MARGIN + col1LabelW + 2.5, textY);
+    doc.text((doc.splitTextToSize(v2, col2ValW - 5) as string[])[0] ?? '', midX + col2LabelW + 2.5, textY);
+    y += rowH;
+  }
+
+  y += 8;
+
+  // Chronological reports log
+  for (let idx = 0; idx < sorted.length; idx++) {
+    const item = sorted[idx];
+    if (y + 22 > BOTTOM_LIMIT) {
+      doc.addPage();
+      y = MARGIN;
+    }
+
+    // Report header banner
+    doc.setFillColor(...LIGHT_FILL);
+    doc.setDrawColor(...BLACK);
+    doc.setLineWidth(0.35);
+    doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...BLACK);
+    const headerTitle = `${idx + 1}. ${formatDate(item.reportDate)} — ${item.templateName} (${
+      item.siteName || 'No site'
+    })`;
+    doc.text((doc.splitTextToSize(headerTitle, CONTENT_W - 6) as string[])[0] ?? '', MARGIN + 3, y + 5.4);
+    y += 12;
+
+    for (const field of item.templateSnapshot.fields) {
+      if (field.type === 'photo') continue;
+      const val = fieldValueText(item, field);
+      if (!val) continue;
+
+      if (y + 12 > BOTTOM_LIMIT) {
+        doc.addPage();
+        y = MARGIN;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...DARK_GREY);
+      doc.text(`${field.label}:`, MARGIN, y);
+      y += 4.5;
+
+      const lines = valueLines(doc, val, CONTENT_W, 9.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...BLACK);
+      for (const line of lines) {
+        if (y + 4.8 > BOTTOM_LIMIT) {
+          doc.addPage();
+          y = MARGIN;
+        }
+        doc.text(line, MARGIN, y);
+        y += 4.8;
+      }
+      y += 2.5;
+    }
+
+    y += 4;
+  }
+
+  // Footers
+  const total = doc.getNumberOfPages();
+  for (let page = 1; page <= total; page++) {
+    doc.setPage(page);
+    const fy = PAGE_H - MARGIN;
+    doc.setDrawColor(...BORDER_GREY);
+    doc.setLineWidth(0.25);
+    doc.line(MARGIN, fy - 5, MARGIN + CONTENT_W, fy - 5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...MID_GREY);
+    const left = [brand, 'Site Summary Report', periodLabel].filter(Boolean).join(' — ');
+    doc.text(left, MARGIN, fy);
+    const right = `Page ${page} of ${total}`;
+    doc.text(right, MARGIN + CONTENT_W - doc.getTextWidth(right), fy);
+  }
+
+  return doc.output('blob');
+}
+
+export function summaryPdfFilename(startDate: string, endDate: string, siteFilter?: string): string {
+  const site = (siteFilter?.trim() || 'all-sites').replace(/[^\w\-]+/g, '-').replace(/-+/g, '-');
+  return `Site-Summary-${site}-${startDate}-to-${endDate}.pdf`;
 }

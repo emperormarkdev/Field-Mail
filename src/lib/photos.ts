@@ -2,7 +2,9 @@ import { newId } from './id';
 import type { StoredPhoto } from '../types';
 
 const MAX_EDGE = 1280;
-const QUALITY = 0.7;
+const QUALITY = 0.72;
+const LOW_SIGNAL_MAX_EDGE = 880;
+const LOW_SIGNAL_QUALITY = 0.5;
 const THUMB_EDGE = 320;
 const THUMB_QUALITY = 0.6;
 
@@ -13,8 +15,7 @@ interface Decoded {
   release: () => void;
 }
 
-async function decode(file: File): Promise<Decoded> {
-  // createImageBitmap applies EXIF orientation, so portrait phone shots land upright.
+async function decode(file: Blob): Promise<Decoded> {
   if ('createImageBitmap' in window) {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -25,7 +26,7 @@ async function decode(file: File): Promise<Decoded> {
         release: () => bitmap.close(),
       };
     } catch {
-      // Fall through to the <img> path (some Safari versions reject the options bag).
+      // Fall through to <img> decoding.
     }
   }
 
@@ -53,7 +54,38 @@ function fit(width: number, height: number, maxEdge: number) {
   };
 }
 
-function drawTo(source: CanvasImageSource, width: number, height: number): HTMLCanvasElement {
+function drawStamp(ctx: CanvasRenderingContext2D, width: number, height: number, text: string) {
+  const clean = text.trim();
+  if (!clean) return;
+  const fontSize = Math.max(13, Math.round(Math.min(width, height) * 0.026));
+  ctx.save();
+  ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+  const padX = Math.round(fontSize * 0.65);
+  const padY = Math.round(fontSize * 0.45);
+  const margin = Math.round(fontSize * 0.6);
+  const metrics = ctx.measureText(clean);
+  const boxW = Math.min(width - margin * 2, Math.ceil(metrics.width + padX * 2));
+  const boxH = Math.ceil(fontSize + padY * 2);
+  const boxX = width - boxW - margin;
+  const boxY = height - boxH - margin;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.68)';
+  ctx.beginPath();
+  ctx.roundRect(boxX, boxY, boxW, boxH, Math.round(fontSize * 0.35));
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(clean, boxX + padX, boxY + boxH / 2, boxW - padX * 2);
+  ctx.restore();
+}
+
+function drawTo(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  stampText?: string,
+): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -61,10 +93,12 @@ function drawTo(source: CanvasImageSource, width: number, height: number): HTMLC
   if (!ctx) throw new Error('Your browser could not process that photo.');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  // White matte so transparent PNGs don't turn black once flattened to JPEG.
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(source, 0, 0, width, height);
+  if (stampText) {
+    drawStamp(ctx, width, height, stampText);
+  }
   return canvas;
 }
 
@@ -85,20 +119,31 @@ export interface CompressedPhoto {
   height: number;
 }
 
-export async function compressPhoto(file: File): Promise<CompressedPhoto> {
+export interface CompressOptions {
+  lowSignal?: boolean;
+  stampText?: string;
+}
+
+export async function compressPhoto(
+  file: File,
+  options?: CompressOptions,
+): Promise<CompressedPhoto> {
   if (!file.type.startsWith('image/')) {
     throw new Error('That file is not an image.');
   }
 
+  const maxEdge = options?.lowSignal ? LOW_SIGNAL_MAX_EDGE : MAX_EDGE;
+  const quality = options?.lowSignal ? LOW_SIGNAL_QUALITY : QUALITY;
+
   const decoded = await decode(file);
   try {
-    const main = fit(decoded.width, decoded.height, MAX_EDGE);
-    const canvas = drawTo(decoded.source, main.width, main.height);
+    const main = fit(decoded.width, decoded.height, maxEdge);
+    const canvas = drawTo(decoded.source, main.width, main.height, options?.stampText);
     const thumbSize = fit(main.width, main.height, THUMB_EDGE);
     const thumbCanvas = drawTo(canvas, thumbSize.width, thumbSize.height);
 
     const [blob, thumb] = await Promise.all([
-      toBlob(canvas, QUALITY),
+      toBlob(canvas, quality),
       toBlob(thumbCanvas, THUMB_QUALITY),
     ]);
 
@@ -108,12 +153,31 @@ export async function compressPhoto(file: File): Promise<CompressedPhoto> {
   }
 }
 
+export async function photoBlobsFromCanvas(
+  canvas: HTMLCanvasElement,
+  lowSignal = false,
+): Promise<CompressedPhoto> {
+  const quality = lowSignal ? LOW_SIGNAL_QUALITY : QUALITY;
+  const thumbSize = fit(canvas.width, canvas.height, THUMB_EDGE);
+  const thumbCanvas = drawTo(canvas, thumbSize.width, thumbSize.height);
+  const [blob, thumb] = await Promise.all([
+    toBlob(canvas, quality),
+    toBlob(thumbCanvas, THUMB_QUALITY),
+  ]);
+  return { blob, thumb, width: canvas.width, height: canvas.height };
+}
+
 export async function createStoredPhoto(params: {
   file: File;
   reportId: string;
   fieldId: string;
+  lowSignal?: boolean;
+  stampText?: string;
 }): Promise<StoredPhoto> {
-  const compressed = await compressPhoto(params.file);
+  const compressed = await compressPhoto(params.file, {
+    lowSignal: params.lowSignal,
+    stampText: params.stampText,
+  });
   return {
     id: newId(),
     reportId: params.reportId,
@@ -129,7 +193,6 @@ export async function createStoredPhoto(params: {
 
 const urlCache = new WeakMap<Blob, string>();
 
-/** Stable object URL per blob so React re-renders don't leak or flicker. */
 export function blobUrl(blob: Blob): string {
   const cached = urlCache.get(blob);
   if (cached) return cached;

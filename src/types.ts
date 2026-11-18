@@ -126,6 +126,9 @@ export interface Settings {
   sendMeCopy: boolean;
   theme: ThemeMode;
   branding: Branding;
+  lowSignalMode?: boolean;
+  stampPhotos?: boolean;
+  snippets?: string[];
   createdAt: number;
 }
 

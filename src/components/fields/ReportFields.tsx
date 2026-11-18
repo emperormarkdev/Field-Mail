@@ -1,6 +1,7 @@
-import { useRef, type ChangeEvent } from 'react';
-import { Camera, ImagePlus, Loader2, X } from 'lucide-react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Camera, ImagePlus, Loader2, Pencil, Plus, TextQuote, X } from 'lucide-react';
 import type { Field, FieldValue, StoredPhoto } from '../../types';
+import { DEFAULT_SNIPPETS } from '../../db/starters';
 import { Field as FormField, Input, Select, Textarea } from '../ui/Field';
 import { cn } from '../../lib/cn';
 import { blobUrl } from '../../lib/photos';
@@ -11,10 +12,14 @@ export interface FieldControlProps {
   error?: string;
   photos: StoredPhoto[];
   busyFieldId: string | null;
+  snippets?: string[];
+  onAddSnippet?: (phrase: string) => void;
+  onRemoveSnippet?: (phrase: string) => void;
   onValueChange: (fieldId: string, value: FieldValue) => void;
   onBlur: () => void;
   onAddPhotos: (fieldId: string, files: File[]) => void;
   onRemovePhoto: (photo: StoredPhoto) => void;
+  onMarkupPhoto?: (photo: StoredPhoto) => void;
   onCaptionChange: (photo: StoredPhoto, caption: string) => void;
 }
 
@@ -24,10 +29,14 @@ export function FieldControl({
   error,
   photos,
   busyFieldId,
+  snippets = DEFAULT_SNIPPETS,
+  onAddSnippet,
+  onRemoveSnippet,
   onValueChange,
   onBlur,
   onAddPhotos,
   onRemovePhoto,
+  onMarkupPhoto,
   onCaptionChange,
 }: FieldControlProps) {
   const id = `field-${field.id}`;
@@ -42,32 +51,46 @@ export function FieldControl({
         error={error}
         onAddPhotos={onAddPhotos}
         onRemovePhoto={onRemovePhoto}
+        onMarkupPhoto={onMarkupPhoto}
         onCaptionChange={onCaptionChange}
       />
     );
   }
 
   if (field.type === 'long') {
+    const currentText = typeof value === 'string' ? value : '';
     return (
-      <FormField
-        label={field.label}
-        htmlFor={id}
-        required={field.required}
-        hint={field.help}
-        error={error}
-      >
-        <Textarea
-          id={id}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(event) => set(event.target.value)}
-          onBlur={onBlur}
-          aria-invalid={!!error}
-          rows={4}
-          enterKeyHint="enter"
-          autoCapitalize="sentences"
-          autoCorrect="on"
+      <div className="flex flex-col gap-2">
+        <FormField
+          label={field.label}
+          htmlFor={id}
+          required={field.required}
+          hint={field.help}
+          error={error}
+        >
+          <Textarea
+            id={id}
+            value={currentText}
+            onChange={(event) => set(event.target.value)}
+            onBlur={onBlur}
+            aria-invalid={!!error}
+            rows={4}
+            enterKeyHint="enter"
+            autoCapitalize="sentences"
+            autoCorrect="on"
+          />
+        </FormField>
+        <SnippetBar
+          snippets={snippets}
+          onInsert={(phrase) => {
+            const sep = currentText.trim().length > 0 ? '\n' : '';
+            set(`${currentText.trimEnd()}${sep}${phrase}`);
+            onBlur();
+          }}
+          onAddSnippet={onAddSnippet}
+          onRemoveSnippet={onRemoveSnippet}
         />
-      </FormField>
+      </div>
     );
   }
 
@@ -175,6 +198,112 @@ export function FieldControl({
   );
 }
 
+function SnippetBar({
+  snippets,
+  onInsert,
+  onAddSnippet,
+  onRemoveSnippet,
+}: {
+  snippets: string[];
+  onInsert: (phrase: string) => void;
+  onAddSnippet?: (phrase: string) => void;
+  onRemoveSnippet?: (phrase: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const handleAdd = (event: FormEvent) => {
+    event.preventDefault();
+    const clean = draft.trim();
+    if (!clean) return;
+    onAddSnippet?.(clean);
+    onInsert(clean);
+    setDraft('');
+    setAdding(false);
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="press inline-flex cursor-pointer items-center gap-1.5 text-caption-1-semibold text-accent hover:underline"
+      >
+        <TextQuote aria-hidden className="size-3.5" />
+        {open ? 'Hide saved phrases' : 'Insert saved phrase'}
+      </button>
+
+      {open && (
+        <div className="mt-2 rounded-field border border-line bg-raised p-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {snippets.map((phrase) => (
+              <span
+                key={phrase}
+                className="inline-flex items-center rounded-chip border border-line-strong bg-surface text-caption-1-medium text-ink"
+              >
+                <button
+                  type="button"
+                  onClick={() => onInsert(phrase)}
+                  className="press cursor-pointer px-2.5 py-1 text-start hover:text-accent"
+                >
+                  + {phrase}
+                </button>
+                {onRemoveSnippet && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveSnippet(phrase)}
+                    aria-label={`Remove phrase: ${phrase}`}
+                    className="press cursor-pointer border-s border-line px-1.5 py-1 text-muted hover:text-danger"
+                  >
+                    <X aria-hidden className="size-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+            {onAddSnippet && !adding && (
+              <button
+                type="button"
+                onClick={() => setAdding(true)}
+                className="press inline-flex cursor-pointer items-center gap-1 rounded-chip border border-dashed border-accent/50 bg-accent-soft px-2.5 py-1 text-caption-1-semibold text-accent"
+              >
+                <Plus aria-hidden className="size-3" />
+                New phrase
+              </button>
+            )}
+          </div>
+
+          {adding && (
+            <form onSubmit={handleAdd} className="mt-2 flex gap-1.5">
+              <Input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Type a reusable phrase…"
+                className="min-h-8 text-body-2-regular"
+                autoFocus
+              />
+              <button
+                type="submit"
+                className="press shrink-0 cursor-pointer rounded-field bg-button-primary px-3 text-caption-1-semibold text-text-white"
+              >
+                Save & insert
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdding(false)}
+                className="press shrink-0 cursor-pointer rounded-field border border-line-strong bg-surface px-2.5 text-caption-1-medium text-muted"
+              >
+                Cancel
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PhotoField({
   field,
   photos,
@@ -182,6 +311,7 @@ function PhotoField({
   error,
   onAddPhotos,
   onRemovePhoto,
+  onMarkupPhoto,
   onCaptionChange,
 }: {
   field: Field;
@@ -190,6 +320,7 @@ function PhotoField({
   error?: string;
   onAddPhotos: (fieldId: string, files: File[]) => void;
   onRemovePhoto: (photo: StoredPhoto) => void;
+  onMarkupPhoto?: (photo: StoredPhoto) => void;
   onCaptionChange: (photo: StoredPhoto, caption: string) => void;
 }) {
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -236,11 +367,21 @@ function PhotoField({
                   className="size-full object-cover"
                   loading="lazy"
                 />
+                {onMarkupPhoto && (
+                  <button
+                    type="button"
+                    onClick={() => onMarkupPhoto(photo)}
+                    className="press absolute start-1.5 top-1.5 inline-flex h-7 cursor-pointer items-center gap-1 rounded-full bg-black/70 px-2.5 text-caption-2-semibold text-white hover:bg-black/85"
+                  >
+                    <Pencil aria-hidden className="size-3" />
+                    Mark up
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onRemovePhoto(photo)}
                   aria-label="Remove photo"
-                  className="press absolute end-1.5 top-1.5 grid size-7 place-items-center rounded-full bg-black/65 text-white hover:bg-black/80"
+                  className="press absolute end-1.5 top-1.5 grid size-7 cursor-pointer place-items-center rounded-full bg-black/70 text-white hover:bg-black/85"
                 >
                   <X aria-hidden className="size-3.5" />
                 </button>
@@ -285,7 +426,7 @@ function PhotoField({
           type="button"
           onClick={() => cameraRef.current?.click()}
           disabled={busy}
-          className="press inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-field border border-line-strong bg-surface px-3.5 text-body-medium text-ink hover:bg-raised disabled:opacity-50"
+          className="press inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-field border border-line-strong bg-surface px-3.5 text-body-medium text-ink hover:bg-raised disabled:opacity-50"
         >
           {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <Camera aria-hidden className="size-4" />}
           Take photo
@@ -294,7 +435,7 @@ function PhotoField({
           type="button"
           onClick={() => galleryRef.current?.click()}
           disabled={busy}
-          className="press inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-field border border-line-strong bg-surface px-3.5 text-body-medium text-ink hover:bg-raised disabled:opacity-50"
+          className="press inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-field border border-line-strong bg-surface px-3.5 text-body-medium text-ink hover:bg-raised disabled:opacity-50"
         >
           <ImagePlus aria-hidden className="size-4" />
           Choose files

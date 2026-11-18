@@ -1,16 +1,22 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { FileText, Plus } from 'lucide-react';
+import { CalendarRange, Download, FileText, Plus } from 'lucide-react';
 import { db } from '../db/db';
+import { useSettings } from '../hooks/useSettings';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useToast } from '../components/ui/Toast';
 import { PageHeader } from '../components/ui/PageHeader';
 import { ReportCard } from '../components/ReportCard';
 import { StatusBadge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { Field, Input, Select } from '../components/ui/Field';
+import { Sheet } from '../components/ui/Sheet';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ListSkeleton } from '../components/ui/Skeleton';
-import { formatDate, formatDateTime, plural, truncate } from '../lib/format';
+import { downloadBlob } from '../lib/backup';
+import { formatDate, formatDateTime, isoFromDate, plural, todayIso, truncate } from '../lib/format';
+import { buildSummaryPdfBlob, summaryPdfFilename } from '../lib/pdf';
 import { cn } from '../lib/cn';
 import type { Report } from '../types';
 
@@ -32,11 +38,25 @@ function matches(report: Report, filter: Filter): boolean {
   return report.status === 'failed';
 }
 
+function daysAgoIso(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return isoFromDate(d);
+}
+
 export function ReportsPage() {
   const navigate = useNavigate();
+  const { settings } = useSettings();
+  const toast = useToast();
   const split = useMediaQuery('(min-width: 768px)');
   const [filter, setFilter] = useState<Filter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [startDate, setStartDate] = useState(() => daysAgoIso(6));
+  const [endDate, setEndDate] = useState(() => todayIso());
+  const [siteFilter, setSiteFilter] = useState('');
+  const [buildingSummary, setBuildingSummary] = useState(false);
 
   const reports = useLiveQuery(
     () => db.reports.orderBy('updatedAt').reverse().toArray(),
@@ -55,6 +75,24 @@ export function ReportsPage() {
     };
   }, [reports]);
 
+  const knownSites = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of reports ?? []) {
+      const s = r.siteName.trim();
+      if (s) set.add(s);
+    }
+    return Array.from(set).sort();
+  }, [reports]);
+
+  const summaryReports = useMemo(() => {
+    return (reports ?? []).filter((r) => {
+      if (startDate && r.reportDate < startDate) return false;
+      if (endDate && r.reportDate > endDate) return false;
+      if (siteFilter && r.siteName.trim() !== siteFilter) return false;
+      return true;
+    });
+  }, [reports, startDate, endDate, siteFilter]);
+
   const visible = (reports ?? []).filter((report) => matches(report, filter));
   const selected = (reports ?? []).find((report) => report.id === selectedId) ?? null;
 
@@ -63,17 +101,57 @@ export function ReportsPage() {
     else navigate(`/reports/${report.id}`);
   };
 
+  const handleDownloadSummary = async () => {
+    if (!settings) return;
+    if (summaryReports.length === 0) {
+      toast.show({ message: 'No reports match the selected date range.', tone: 'error' });
+      return;
+    }
+    setBuildingSummary(true);
+    try {
+      const blob = await buildSummaryPdfBlob({
+        reports: summaryReports,
+        settings,
+        startDate,
+        endDate,
+        siteFilter: siteFilter || undefined,
+      });
+      downloadBlob(blob, summaryPdfFilename(startDate, endDate, siteFilter || undefined));
+      toast.show({
+        message: `Summary PDF downloaded (${summaryReports.length} ${plural(
+          summaryReports.length,
+          'report',
+        )}).`,
+        tone: 'success',
+      });
+      setSummaryOpen(false);
+    } catch {
+      toast.show({ message: 'Could not generate summary PDF.', tone: 'error' });
+    } finally {
+      setBuildingSummary(false);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1120px] px-4 pb-10 sm:px-6">
       <PageHeader
         title="Reports"
         sticky={false}
         actions={
-          <Link to="/new">
-            <Button variant="primary" iconLeft={<Plus aria-hidden className="size-4" />}>
-              New report
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setSummaryOpen(true)}
+              iconLeft={<CalendarRange aria-hidden className="size-4" />}
+            >
+              Summary PDF
             </Button>
-          </Link>
+            <Link to="/new">
+              <Button variant="primary" iconLeft={<Plus aria-hidden className="size-4" />}>
+                New report
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -193,6 +271,112 @@ export function ReportsPage() {
           </aside>
         )}
       </div>
+
+      <Sheet
+        open={summaryOpen}
+        onClose={() => setSummaryOpen(false)}
+        title="Weekly / Date-Range Summary PDF"
+        description="Combine multiple reports into one printable black-and-white summary document."
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setSummaryOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              fullWidth
+              loading={buildingSummary}
+              disabled={summaryReports.length === 0}
+              onClick={() => void handleDownloadSummary()}
+              iconLeft={<Download aria-hidden className="size-4" />}
+            >
+              Download Summary PDF ({summaryReports.length})
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                { label: 'Last 7 days', days: 6 },
+                { label: 'Last 14 days', days: 13 },
+                { label: 'Last 30 days', days: 29 },
+              ] as const
+            ).map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => {
+                  setStartDate(daysAgoIso(preset.days));
+                  setEndDate(todayIso());
+                }}
+                className="press cursor-pointer rounded-chip border border-line-strong bg-raised px-3 py-1 text-caption-1-semibold text-ink hover:bg-surface"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="From date" htmlFor="summary-start">
+              <Input
+                id="summary-start"
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </Field>
+            <Field label="To date" htmlFor="summary-end">
+              <Input
+                id="summary-end"
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </Field>
+          </div>
+
+          <Field label="Site" htmlFor="summary-site">
+            <Select
+              id="summary-site"
+              value={siteFilter}
+              onChange={(event) => setSiteFilter(event.target.value)}
+            >
+              <option value="">All sites</option>
+              {knownSites.map((site) => (
+                <option key={site} value={site}>
+                  {site}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <div className="rounded-card border border-line bg-raised p-3.5">
+            <p className="text-body-2-semibold text-ink">
+              {summaryReports.length} {plural(summaryReports.length, 'report')} found in this range
+            </p>
+            {summaryReports.length > 0 ? (
+              <ul className="mt-2 flex max-h-44 flex-col divide-y divide-line overflow-y-auto">
+                {summaryReports.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between gap-2 py-1.5 text-body-2-regular">
+                    <span className="truncate font-medium text-ink">
+                      {item.templateName} ({item.siteName || 'No site'})
+                    </span>
+                    <span className="shrink-0 text-caption-1-regular text-muted">
+                      {formatDate(item.reportDate)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-body-2-regular text-muted">
+                Adjust the date range or site filter to include reports.
+              </p>
+            )}
+          </div>
+        </div>
+      </Sheet>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Copy, Download, Eye, FileText, FileWarning, Info, Save, Send } from 'lucide-react';
 import { db, createReportDraft, getTemplate } from '../db/db';
+import { DEFAULT_SNIPPETS } from '../db/starters';
 import { useSettings } from '../hooks/useSettings';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useToast } from '../components/ui/Toast';
@@ -13,12 +14,13 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Sheet } from '../components/ui/Sheet';
 import { Skeleton } from '../components/ui/Skeleton';
 import { FieldControl } from '../components/fields/ReportFields';
+import { PhotoMarkupSheet } from '../components/PhotoMarkupSheet';
 import { SendSheet } from '../components/SendSheet';
 import { downloadBlob } from '../lib/backup';
 import { createStoredPhoto } from '../lib/photos';
 import { buildPdfBlob, pdfFilename } from '../lib/pdf';
 import { enqueueReport, flushQueue } from '../lib/queue';
-import { formatDate, todayIso } from '../lib/format';
+import { formatDate, formatDateTime, todayIso } from '../lib/format';
 import { validateReport } from '../lib/validate';
 import type { FieldValue, RecipientAssignment, Report, StoredPhoto } from '../types';
 import { cn } from '../lib/cn';
@@ -41,6 +43,7 @@ export function ReportFormPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sendOpen, setSendOpen] = useState(false);
   const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
+  const [markupPhoto, setMarkupPhoto] = useState<StoredPhoto | null>(null);
   const [sending, setSending] = useState(false);
   const [busyFieldId, setBusyFieldId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -266,19 +269,55 @@ export function ReportFormPage() {
     [patch, errors],
   );
 
+  const snippets = useMemo(
+    () => settings?.snippets ?? DEFAULT_SNIPPETS,
+    [settings?.snippets],
+  );
+
+  const handleAddSnippet = useCallback(
+    (phrase: string) => {
+      const next = Array.from(new Set([...snippets, phrase]));
+      void updateSettings({ snippets: next });
+    },
+    [snippets, updateSettings],
+  );
+
+  const handleRemoveSnippet = useCallback(
+    (phrase: string) => {
+      const next = snippets.filter((item) => item !== phrase);
+      void updateSettings({ snippets: next });
+    },
+    [snippets, updateSettings],
+  );
+
   const addPhotos = useCallback(
     async (fieldId: string, files: File[]) => {
       const current = reportRef.current;
       if (!current) return;
       setBusyFieldId(fieldId);
+      const shouldStamp = settings?.stampPhotos ?? true;
+      const lowSignal = settings?.lowSignalMode ?? false;
+      const stampText = shouldStamp
+        ? [current.siteName.trim(), formatDateTime(Date.now())].filter(Boolean).join(' · ')
+        : undefined;
       try {
         const stored: StoredPhoto[] = [];
         for (const file of files) {
-          stored.push(await createStoredPhoto({ file, reportId: current.id, fieldId }));
+          stored.push(
+            await createStoredPhoto({
+              file,
+              reportId: current.id,
+              fieldId,
+              lowSignal,
+              stampText,
+            }),
+          );
         }
         await db.photos.bulkAdd(stored);
         toast.show({
-          message: `${stored.length} ${stored.length === 1 ? 'photo' : 'photos'} added.`,
+          message: `${stored.length} ${stored.length === 1 ? 'photo' : 'photos'} added${
+            lowSignal ? ' (compact size)' : ''
+          }.`,
           tone: 'success',
         });
         setErrors((previous) => {
@@ -295,7 +334,7 @@ export function ReportFormPage() {
         setBusyFieldId(null);
       }
     },
-    [toast],
+    [toast, settings?.stampPhotos, settings?.lowSignalMode],
   );
 
   const removePhoto = useCallback(
@@ -305,6 +344,17 @@ export function ReportFormPage() {
         message: 'Photo removed.',
         action: { label: 'Undo', onClick: () => void db.photos.put(photo) },
       });
+    },
+    [toast],
+  );
+
+  const savePhotoMarkup = useCallback(
+    async (
+      photoId: string,
+      updated: { blob: Blob; thumb: Blob; width: number; height: number },
+    ) => {
+      await db.photos.update(photoId, updated);
+      toast.show({ message: 'Photo markup saved.', tone: 'success' });
     },
     [toast],
   );
@@ -530,10 +580,14 @@ export function ReportFormPage() {
                   error={errors[field.id]}
                   photos={photos.filter((photo) => photo.fieldId === field.id)}
                   busyFieldId={busyFieldId}
+                  snippets={snippets}
+                  onAddSnippet={handleAddSnippet}
+                  onRemoveSnippet={handleRemoveSnippet}
                   onValueChange={setValue}
                   onBlur={() => void saveNow()}
                   onAddPhotos={(fieldId, files) => void addPhotos(fieldId, files)}
                   onRemovePhoto={removePhoto}
+                  onMarkupPhoto={locked ? undefined : (photo) => setMarkupPhoto(photo)}
                   onCaptionChange={(photo, caption) =>
                     void db.photos.update(photo.id, { caption })
                   }
@@ -606,6 +660,15 @@ export function ReportFormPage() {
           </aside>
         )}
       </div>
+
+      <PhotoMarkupSheet
+        photo={markupPhoto}
+        siteName={report.siteName}
+        stampLabel={formatDateTime(markupPhoto?.createdAt ?? Date.now())}
+        lowSignal={settings?.lowSignalMode ?? false}
+        onClose={() => setMarkupPhoto(null)}
+        onSave={savePhotoMarkup}
+      />
 
       <Sheet
         open={previewSheetOpen}

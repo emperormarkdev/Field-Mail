@@ -300,6 +300,26 @@ export function SettingsPage() {
                 />
               </div>
 
+              <div className="rounded-field border border-line bg-raised p-3">
+                <Switch
+                  id="setting-low-signal"
+                  checked={settings?.lowSignalMode ?? false}
+                  onChange={(lowSignalMode) => void update({ lowSignalMode })}
+                  label="Low-signal compact mode"
+                  description="Shrinks photo sizes further so multi-photo reports send reliably over weak 2G/3G signal."
+                />
+              </div>
+
+              <div className="rounded-field border border-line bg-raised p-3">
+                <Switch
+                  id="setting-stamp-photos"
+                  checked={settings?.stampPhotos ?? true}
+                  onChange={(stampPhotos) => void update({ stampPhotos })}
+                  label="Stamp date & site on photos"
+                  description="Automatically stamps the site name, date, and time in the corner of newly added photos."
+                />
+              </div>
+
               <Button
                 variant="secondary"
                 loading={testing}

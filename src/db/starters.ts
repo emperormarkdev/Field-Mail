@@ -159,6 +159,15 @@ export const STARTER_TEMPLATES: Template[] = [
   },
 ];
 
+export const DEFAULT_SNIPPETS: string[] = [
+  'Work progressed on schedule with no delays.',
+  'No safety incidents or near misses reported.',
+  'All personnel on site wearing required PPE.',
+  'Deliveries received and checked on site.',
+  'Work delayed due to weather conditions.',
+  'Site inspected and secured at end of shift.',
+];
+
 export const DEFAULT_SETTINGS: Settings = {
   id: 'app',
   myName: '',
@@ -169,5 +178,8 @@ export const DEFAULT_SETTINGS: Settings = {
   sendMeCopy: true,
   theme: 'light',
   branding: { companyName: '', logoDataUrl: null, logoAlign: 'left' },
+  lowSignalMode: false,
+  stampPhotos: true,
+  snippets: DEFAULT_SNIPPETS,
   createdAt: now,
 };
