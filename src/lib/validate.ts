@@ -42,6 +42,11 @@ export function validateReport(report: Report, photos: StoredPhoto[]): ReportVal
     }
   }
 
+  if (!report.templateName.trim()) {
+    fieldErrors.templateName = 'Add a report title.';
+    messages.push('Report title');
+  }
+
   if (!report.siteName.trim()) {
     fieldErrors.siteName = 'Add the site name.';
     messages.push('Site name');

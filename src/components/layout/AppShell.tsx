@@ -2,7 +2,7 @@ import { Outlet, useMatch } from 'react-router-dom';
 import { DirectionProvider } from '@/components/foundations/direction/direction';
 import { BottomNav, SideNav } from './Navigation';
 import { OnlineIndicator } from './OnlineIndicator';
-import { InstallPrompt } from './InstallPrompt';
+import { SplashScreen } from './SplashScreen';
 import { UpdatePrompt } from './UpdatePrompt';
 import { cn } from '../../lib/cn';
 
@@ -17,6 +17,7 @@ export function AppShell() {
 
   return (
     <DirectionProvider locale="en-US">
+      <SplashScreen />
       <div className="min-h-dvh">
         <SideNav />
         <div
@@ -32,7 +33,6 @@ export function AppShell() {
           </main>
         </div>
         {!editing && <BottomNav />}
-        <InstallPrompt />
       </div>
     </DirectionProvider>
   );

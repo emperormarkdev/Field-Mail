@@ -3,11 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   RiAddLine,
   RiArrowRightSLine,
-  RiCheckboxCircleLine,
   RiDraftLine,
   RiFileList3Line,
   RiFileTextLine,
-  RiTimeLine,
 } from '@remixicon/react';
 import { db } from '../db/db';
 import { OutboxStrip } from '../components/OutboxStrip';
@@ -29,19 +27,10 @@ export function HomePage() {
   const reports = allReports ? allReports.slice(0, 6) : null;
   const latestDraft = allReports?.find((r) => r.status === 'draft') ?? null;
 
-  const stats = {
-    sent: allReports?.filter((r) => r.status === 'sent').length ?? 0,
-    drafts: allReports?.filter((r) => r.status === 'draft').length ?? 0,
-    waiting:
-      allReports?.filter((r) => r.status === 'queued' || r.status === 'sending' || r.status === 'failed')
-        .length ?? 0,
-  };
-
   return (
     <div className="mx-auto w-full max-w-[1120px] px-4 pb-8 sm:px-6">
       <PageHeader
-        title="Fieldmail"
-        description="Write offline, send as email text & printable PDF"
+        title="Home"
         actions={
           <Link to="/new" className="hidden sm:inline-flex">
             <Button variant="primary" iconLeft={<RiAddLine aria-hidden className="size-4.5" />}>
@@ -53,51 +42,10 @@ export function HomePage() {
 
       <OutboxStrip />
 
-      {allReports && allReports.length > 0 && (
-        <div className="mt-3 grid grid-cols-3 gap-2.5 sm:gap-3">
-          <Link
-            to="/reports"
-            className="press flex items-center gap-2.5 rounded-card border border-line bg-surface p-3 shadow-card hover:bg-raised sm:p-3.5"
-          >
-            <span className=" hidden size-9 shrink-0 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 sm:grid">
-              <RiCheckboxCircleLine aria-hidden className="size-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-headline-bold text-ink sm:text-title-3-bold">{stats.sent}</p>
-              <p className="truncate text-caption-1-medium text-muted">Sent</p>
-            </div>
-          </Link>
-          <Link
-            to="/reports"
-            className="press flex items-center gap-2.5 rounded-card border border-line bg-surface p-3 shadow-card hover:bg-raised sm:p-3.5"
-          >
-            <span className="hidden size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent sm:grid">
-              <RiDraftLine aria-hidden className="size-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-headline-bold text-ink sm:text-title-3-bold">{stats.drafts}</p>
-              <p className="truncate text-caption-1-medium text-muted">Drafts</p>
-            </div>
-          </Link>
-          <Link
-            to="/reports"
-            className="press flex items-center gap-2.5 rounded-card border border-line bg-surface p-3 shadow-card hover:bg-raised sm:p-3.5"
-          >
-            <span className="hidden size-9 shrink-0 place-items-center rounded-xl bg-amber-500/10 text-amber-600 sm:grid">
-              <RiTimeLine aria-hidden className="size-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-headline-bold text-ink sm:text-title-3-bold">{stats.waiting}</p>
-              <p className="truncate text-caption-1-medium text-muted">Waiting</p>
-            </div>
-          </Link>
-        </div>
-      )}
-
       {latestDraft && (
         <Link
           to={`/reports/${latestDraft.id}/edit`}
-          className="press mt-3 flex items-center justify-between gap-3 rounded-card border border-accent/35 bg-accent-soft px-3.5 py-3 sm:px-4"
+          className="press mb-5 flex items-center justify-between gap-3 rounded-card border border-accent/35 bg-accent-soft px-3.5 py-3 sm:px-4"
         >
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-white">
@@ -120,17 +68,17 @@ export function HomePage() {
         </Link>
       )}
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+      <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
         <section aria-labelledby="templates-heading">
           <div className="mb-2.5 flex items-center justify-between gap-3">
             <h2 id="templates-heading" className="text-body-semibold text-ink">
-              Start a report
+              Templates
             </h2>
             <Link
               to="/templates"
               className="press text-caption-1-semibold text-accent hover:underline"
             >
-              Manage templates
+              Manage
             </Link>
           </div>
 

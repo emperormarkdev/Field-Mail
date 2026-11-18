@@ -27,8 +27,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'any',
-        background_color: '#f7f7f7',
-        theme_color: '#2563eb',
+        background_color: '#1d4ed8',
+        theme_color: '#1d4ed8',
         lang: 'en',
         categories: ['productivity', 'business'],
         icons: [

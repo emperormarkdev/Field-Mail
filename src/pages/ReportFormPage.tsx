@@ -466,7 +466,7 @@ export function ReportFormPage() {
   return (
     <div className="mx-auto w-full max-w-[1120px] px-4 pb-6 sm:px-6">
       <PageHeader
-        title={report.templateName}
+        title={report.templateName.trim() || 'Untitled report'}
         backTo={id ? `/reports/${id}` : '/'}
         actions={
           !wide ? (
@@ -519,50 +519,70 @@ export function ReportFormPage() {
       <div className={cn(wide && 'grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] gap-6 items-start')}>
         <div className="min-w-0">
           <div className="rounded-card border border-line bg-surface shadow-card divide-y divide-line">
-            <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-              <div id="site-name" className="scroll-mt-24">
-                <Field
-                  label="Site name"
-                  htmlFor="report-site"
-                  required
-                  error={errors.siteName}
-                >
-                  <Input
-                    id="report-site"
-                    value={report.siteName}
-                    disabled={locked}
-                    list="site-suggestions"
-                    onChange={(event) =>
-                      patch((current) => ({ ...current, siteName: event.target.value }))
-                    }
-                    onBlur={() => {
-                      void saveNow();
-                      const site = reportRef.current?.siteName?.trim();
-                      if (site) void updateSettings({ lastSiteName: site });
-                    }}
-                    placeholder="Site or project name"
-                  />
-                  <datalist id="site-suggestions">
-                    {[settings?.lastSiteName, settings?.defaultSiteName]
-                      .filter((value): value is string => !!value)
-                      .map((value, index) => (
-                        <option key={`${value}-${index}`} value={value} />
-                      ))}
-                  </datalist>
-                </Field>
-              </div>
-              <Field label="Report date" htmlFor="report-date" required>
+            <div className="flex flex-col gap-4 p-4 sm:p-5">
+              <Field
+                label="Report title"
+                htmlFor="report-title"
+                required
+                error={errors.templateName}
+              >
                 <Input
-                  id="report-date"
-                  type="date"
-                  value={report.reportDate}
+                  id="report-title"
+                  value={report.templateName}
                   disabled={locked}
                   onChange={(event) =>
-                    patch((current) => ({ ...current, reportDate: event.target.value }))
+                    patch((current) => ({ ...current, templateName: event.target.value }))
                   }
                   onBlur={() => void saveNow()}
+                  placeholder="e.g. Daily Site Report"
                 />
               </Field>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div id="site-name" className="scroll-mt-24">
+                  <Field
+                    label="Site name"
+                    htmlFor="report-site"
+                    required
+                    error={errors.siteName}
+                  >
+                    <Input
+                      id="report-site"
+                      value={report.siteName}
+                      disabled={locked}
+                      list="site-suggestions"
+                      onChange={(event) =>
+                        patch((current) => ({ ...current, siteName: event.target.value }))
+                      }
+                      onBlur={() => {
+                        void saveNow();
+                        const site = reportRef.current?.siteName?.trim();
+                        if (site) void updateSettings({ lastSiteName: site });
+                      }}
+                      placeholder="Site or project name"
+                    />
+                    <datalist id="site-suggestions">
+                      {[settings?.lastSiteName, settings?.defaultSiteName]
+                        .filter((value): value is string => !!value)
+                        .map((value, index) => (
+                          <option key={`${value}-${index}`} value={value} />
+                        ))}
+                    </datalist>
+                  </Field>
+                </div>
+                <Field label="Report date" htmlFor="report-date" required>
+                  <Input
+                    id="report-date"
+                    type="date"
+                    value={report.reportDate}
+                    disabled={locked}
+                    onChange={(event) =>
+                      patch((current) => ({ ...current, reportDate: event.target.value }))
+                    }
+                    onBlur={() => void saveNow()}
+                  />
+                </Field>
+              </div>
             </div>
 
             {fields.map((field) => (

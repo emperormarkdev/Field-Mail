@@ -7,14 +7,13 @@
     <title>Fieldmail</title>
 
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#f7f8f7" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#1d4ed8" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Fieldmail" />
     <meta name="format-detection" content="telephone=no" />
 
@@ -35,7 +34,9 @@
     </script>
   </head>
   <body class="h-full">
-    <div id="root" class="h-full"></div>
+    <div id="root" class="h-full">
+      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#2563eb 0%,#1d4ed8 55%,#1e3a8a 100%);"></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
