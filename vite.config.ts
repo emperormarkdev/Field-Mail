@@ -1,16 +1,67 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 
-export default defineConfig({
- resolve: {
- alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
- },
+function localApiSendPlugin(mode: string): Plugin {
+  return {
+    name: 'fieldmail-local-api-send',
+    configureServer(server) {
+      server.middlewares.use('/api/send', async (req: IncomingMessage, res: ServerResponse) => {
+        // Reload .env / .env.local on each request so edits take effect without restarting Vite
+        const env = loadEnv(mode, process.cwd(), '');
+        for (const [k, v] of Object.entries(env)) {
+          if (process.env[k] === undefined || v !== '') {
+            process.env[k] = v;
+          }
+        }
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        }
+        const rawText = Buffer.concat(chunks).toString('utf8');
+        let parsedBody: unknown = undefined;
+        if (rawText) {
+          try {
+            parsedBody = JSON.parse(rawText);
+          } catch {
+            parsedBody = undefined;
+          }
+        }
+
+        const vercelReq = Object.assign(req, { body: parsedBody });
+        const vercelRes = Object.assign(res, {
+          status(code: number) {
+            res.statusCode = code;
+            return vercelRes;
+          },
+          json(payload: unknown) {
+            if (!res.headersSent) {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            }
+            res.end(JSON.stringify(payload));
+            return vercelRes;
+          },
+        });
+
+        const mod = await server.ssrLoadModule('/api/send.ts');
+        await mod.default(vercelReq, vercelRes);
+      });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   plugins: [
     react(),
     tailwindcss(),
+    localApiSendPlugin(mode),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
@@ -39,7 +90,6 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        // jsPDF is a large chunk; it must still be precached so PDF generation works offline.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
       devOptions: { enabled: false },
@@ -57,4 +107,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

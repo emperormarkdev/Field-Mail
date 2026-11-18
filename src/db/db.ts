@@ -77,9 +77,25 @@ export async function getTemplate(id: string): Promise<Template | undefined> {
 
 export async function getSettings(): Promise<Settings> {
   const existing = await db.settings.get('app');
-  if (existing) return existing;
-  await db.settings.put(DEFAULT_SETTINGS);
-  return DEFAULT_SETTINGS;
+  if (existing) {
+    if (!existing.accessKey || !existing.gmail) {
+      const patched: Settings = {
+        ...existing,
+        gmail: existing.gmail || 'markchukwudiokezie@gmail.com',
+        accessKey: existing.accessKey || 'fieldmail2026',
+      };
+      await db.settings.put(patched);
+      return patched;
+    }
+    return existing;
+  }
+  const initial: Settings = {
+    ...DEFAULT_SETTINGS,
+    gmail: 'markchukwudiokezie@gmail.com',
+    accessKey: 'fieldmail2026',
+  };
+  await db.settings.put(initial);
+  return initial;
 }
 
 export async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
