@@ -25,8 +25,14 @@ import { useToast } from '../components/ui/Toast';
 import { exportBackup, downloadBlob, importBackup } from '../lib/backup';
 import { postPart, SendError } from '../lib/api';
 import { base64FromBuffer } from '../lib/photos';
+import {
+  EMAIL_PROVIDERS,
+  getProviderPreset,
+  inferProviderFromEmail,
+  resolveSmtpConfig,
+} from '../lib/emailProviders';
 import { cn } from '../lib/cn';
-import type { LogoAlignment, ThemeMode } from '../types';
+import type { EmailProvider, LogoAlignment, ThemeMode } from '../types';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string; icon: typeof Sun }> = [
   { mode: 'light', label: 'Light', icon: Sun },
@@ -51,6 +57,9 @@ export function SettingsPage() {
   const [myName, setMyName] = useState('');
   const [gmail, setGmail] = useState('');
   const [accessKey, setAccessKey] = useState('');
+  const [emailProvider, setEmailProvider] = useState<EmailProvider>('gmail');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState<number>(465);
   const [siteName, setSiteName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [testing, setTesting] = useState(false);
@@ -60,27 +69,65 @@ export function SettingsPage() {
     setMyName(settings.myName);
     setGmail(settings.gmail);
     setAccessKey(settings.accessKey);
+    setEmailProvider(settings.emailProvider ?? 'gmail');
+    setSmtpHost(settings.smtpHost ?? '');
+    setSmtpPort(settings.smtpPort ?? 465);
     setSiteName(settings.defaultSiteName);
     setCompanyName(settings.branding.companyName);
   }, [settings]);
 
-  const saveText = (field: 'myName' | 'gmail' | 'accessKey' | 'defaultSiteName', value: string) => {
+  const saveText = (field: 'myName' | 'gmail' | 'accessKey' | 'smtpHost' | 'defaultSiteName', value: string) => {
     void update({ [field]: value.trim() });
   };
+
+  const handleEmailBlur = () => {
+    const clean = gmail.trim();
+    const inferred = inferProviderFromEmail(clean);
+    if (inferred && inferred !== emailProvider) {
+      setEmailProvider(inferred);
+      void update({ gmail: clean, emailProvider: inferred });
+    } else {
+      void update({ gmail: clean });
+    }
+  };
+
+  const selectProvider = (next: EmailProvider) => {
+    setEmailProvider(next);
+    void update({ emailProvider: next });
+  };
+
+  const activeProvider = getProviderPreset(emailProvider);
 
   const sendTest = async () => {
     const cleanEmail = gmail.trim();
     const cleanKey = accessKey.trim();
+    const { smtpHost: resolvedHost, smtpPort: resolvedPort } = resolveSmtpConfig({
+      emailProvider,
+      smtpHost,
+      smtpPort,
+    });
+
     if (!cleanEmail) {
-      toast.show({ message: 'Enter your Gmail address first.', tone: 'error' });
+      toast.show({ message: 'Enter your email address first.', tone: 'error' });
       return;
     }
     if (!cleanKey) {
-      toast.show({ message: 'Enter your 16-character Gmail App Password first.', tone: 'error' });
+      toast.show({ message: `Enter your ${activeProvider.passwordLabel} first.`, tone: 'error' });
+      return;
+    }
+    if (emailProvider === 'custom' && !resolvedHost) {
+      toast.show({ message: 'Enter your SMTP server hostname first (e.g. mail.yourdomain.com).', tone: 'error' });
       return;
     }
 
-    await update({ myName: myName.trim(), gmail: cleanEmail, accessKey: cleanKey });
+    await update({
+      myName: myName.trim(),
+      gmail: cleanEmail,
+      accessKey: cleanKey,
+      emailProvider,
+      smtpHost: smtpHost.trim(),
+      smtpPort,
+    });
 
     setTesting(true);
     try {
@@ -112,6 +159,8 @@ export function SettingsPage() {
         senderName: myName.trim() || undefined,
         senderEmail: cleanEmail,
         senderAppPassword: cleanKey,
+        smtpHost: resolvedHost || undefined,
+        smtpPort: resolvedPort,
         subject: 'Fieldmail test email',
         html: '<p>Your email is ready. Reports you send from Fieldmail will arrive with the full written text in the email body and a printable PDF attached.</p>',
         pdf: { filename: 'fieldmail-test-report.pdf', base64: base64FromBuffer(buffer) },
@@ -195,8 +244,8 @@ export function SettingsPage() {
         <div className="flex min-w-0 flex-col gap-4">
           <Card>
             <CardHeader
-              title="Your details & Gmail"
-              description="Reports are sent directly from your Gmail so every sent report appears in your Sent folder."
+              title="Your details & email"
+              description="Works with Gmail, Outlook, Yahoo, Zoho, Proton, or any company domain email. Reports send directly from your account."
             />
             <CardBody className="flex flex-col gap-4 pt-3">
               <Field label="Your name" htmlFor="setting-name">
@@ -209,22 +258,77 @@ export function SettingsPage() {
                   placeholder="Your full name"
                 />
               </Field>
-              <Field label="Your Gmail address" htmlFor="setting-gmail">
+              <Field label="Your email address" htmlFor="setting-gmail">
                 <Input
                   id="setting-gmail"
                   type="email"
                   inputMode="email"
                   value={gmail}
                   onChange={(event) => setGmail(event.target.value)}
-                  onBlur={() => saveText('gmail', gmail)}
+                  onBlur={handleEmailBlur}
                   autoComplete="email"
-                  placeholder="you@gmail.com"
+                  placeholder="you@company.com"
                 />
               </Field>
-              <Field
-                label="Gmail App Password"
-                htmlFor="setting-app-password"
-              >
+
+              <div>
+                <p className="mb-1.5 text-body-medium text-ink">Email provider</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="Email provider">
+                  {EMAIL_PROVIDERS.map((provider) => {
+                    const active = emailProvider === provider.id;
+                    return (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        onClick={() => selectProvider(provider.id)}
+                        aria-pressed={active}
+                        className={cn(
+                          'press flex min-h-9 cursor-pointer items-center justify-center rounded-field border px-2 text-center text-body-2-semibold',
+                          active
+                            ? 'border-accent/45 bg-accent-soft text-accent'
+                            : 'border-line-strong bg-surface text-muted hover:bg-raised hover:text-ink',
+                        )}
+                      >
+                        {provider.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {emailProvider === 'custom' && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="sm:col-span-2">
+                    <Field label="SMTP server" htmlFor="setting-smtp-host">
+                      <Input
+                        id="setting-smtp-host"
+                        value={smtpHost}
+                        onChange={(event) => setSmtpHost(event.target.value)}
+                        onBlur={() => saveText('smtpHost', smtpHost)}
+                        placeholder="mail.yourdomain.com"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Port" htmlFor="setting-smtp-port">
+                    <select
+                      id="setting-smtp-port"
+                      value={smtpPort}
+                      onChange={(event) => {
+                        const port = Number(event.target.value);
+                        setSmtpPort(port);
+                        void update({ smtpPort: port });
+                      }}
+                      className="min-h-11 w-full rounded-field border border-line-strong bg-surface px-3 text-body-regular text-ink outline-none focus:border-accent"
+                    >
+                      <option value={465}>465 (SSL)</option>
+                      <option value={587}>587 (TLS)</option>
+                      <option value={2525}>2525 (TLS)</option>
+                    </select>
+                  </Field>
+                </div>
+              )}
+
+              <Field label={activeProvider.passwordLabel} htmlFor="setting-app-password">
                 <Input
                   id="setting-app-password"
                   type="password"
@@ -232,18 +336,23 @@ export function SettingsPage() {
                   onChange={(event) => setAccessKey(event.target.value)}
                   onBlur={() => saveText('accessKey', accessKey)}
                   autoComplete="off"
-                  placeholder="xxxx xxxx xxxx xxxx"
+                  placeholder={activeProvider.passwordPlaceholder}
                 />
                 <p className="mt-1.5 text-caption-1-regular text-muted">
-                  Saved only on this device.{' '}
-                  <a
-                    href="https://myaccount.google.com/apppasswords"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-accent underline underline-offset-2"
-                  >
-                    Get your 16-letter App Password from Google
-                  </a>
+                  Saved only on this device.
+                  {activeProvider.helpUrl && activeProvider.helpLabel && (
+                    <>
+                      {' '}
+                      <a
+                        href={activeProvider.helpUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-accent underline underline-offset-2"
+                      >
+                        {activeProvider.helpLabel}
+                      </a>
+                    </>
+                  )}
                 </p>
               </Field>
               <Field label="Usual site name" htmlFor="setting-site">

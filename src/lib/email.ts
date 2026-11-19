@@ -1,6 +1,7 @@
 import type { Field, Report, SendPayload, Settings, StoredPhoto } from '../types';
 import { formatDate, formatLongDate } from './format';
 import { buildPdfBase64, pdfFilename } from './pdf';
+import { resolveSmtpConfig } from './emailProviders';
 
 const MAX_BASE64_CHARS = 3_400_000;
 const PDF_OVERHEAD_BYTES = 300_000;
@@ -211,6 +212,7 @@ export async function buildParts(params: {
 
     const photoCounts = countPhotosByField(group);
     const subject = buildSubject(report);
+    const { smtpHost, smtpPort } = resolveSmtpConfig(settings);
 
     built.push({
       reportId: report.id,
@@ -223,6 +225,8 @@ export async function buildParts(params: {
       senderName: settings.myName.trim() || undefined,
       senderEmail: settings.gmail.trim() || undefined,
       senderAppPassword: settings.accessKey.trim() || undefined,
+      smtpHost: smtpHost || undefined,
+      smtpPort,
       subject: groups.length > 1 ? `${subject} (Part ${index + 1} of ${groups.length})` : subject,
       html: buildHtmlBody({
         report,

@@ -115,12 +115,17 @@ export interface Branding {
   logoAlign?: LogoAlignment;
 }
 
+export type EmailProvider = 'gmail' | 'outlook' | 'yahoo' | 'zoho' | 'proton' | 'custom';
+
 export interface Settings {
   id: 'app';
   myName: string;
   gmail: string;
   /** Device-local only, entered once in Settings. Never bundled into the build. */
   accessKey: string;
+  emailProvider?: EmailProvider;
+  smtpHost?: string;
+  smtpPort?: number;
   defaultSiteName: string;
   lastSiteName: string;
   sendMeCopy: boolean;
@@ -144,6 +149,8 @@ export interface SendPayload {
   senderName?: string;
   senderEmail?: string;
   senderAppPassword?: string;
+  smtpHost?: string;
+  smtpPort?: number;
   subject: string;
   html: string;
   text?: string;

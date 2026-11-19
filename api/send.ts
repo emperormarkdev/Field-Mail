@@ -26,6 +26,8 @@ interface SendBody {
   senderName?: unknown;
   senderEmail?: unknown;
   senderAppPassword?: unknown;
+  smtpHost?: unknown;
+  smtpPort?: unknown;
   subject?: unknown;
   html?: unknown;
   text?: unknown;
@@ -66,13 +68,39 @@ function checkRateLimit(ip: string): boolean {
   return bucket.count <= RATE_LIMIT;
 }
 
-function createGmailTransport(user: string, rawPass: string) {
-  const pass = rawPass.replace(/\s/g, '');
+const HOST_RE = /^(?=.{4,120}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+const ALLOWED_PORTS = new Set([465, 587, 2525]);
+
+function cleanSmtpHost(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return 'smtp.gmail.com';
+  if (typeof value !== 'string') return null;
+  const host = value.trim().toLowerCase();
+  if (!HOST_RE.test(host)) return null;
+  if (
+    host === 'localhost' ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.localhost')
+  ) {
+    return null;
+  }
+  return host;
+}
+
+function cleanSmtpPort(value: unknown, host: string): number {
+  if (typeof value === 'number' && ALLOWED_PORTS.has(value)) return value;
+  return host === 'smtp.office365.com' || host === 'smtp.protonmail.ch' ? 587 : 465;
+}
+
+function createSmtpTransport(host: string, port: number, user: string, rawPass: string) {
+  const pass = host === 'smtp.gmail.com' ? rawPass.replace(/\s/g, '') : rawPass.trim();
   if (!user || !pass) return null;
+  const secure = port === 465;
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    host,
+    port,
+    secure,
+    requireTLS: !secure,
     auth: { user, pass },
     connectionTimeout: 15_000,
     greetingTimeout: 10_000,
@@ -201,13 +229,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   seenKeys.set(dedupeKey, Date.now() + DEDUPE_TTL_MS);
 
-  // Use the visitor's own Gmail + App Password if provided, falling back to server env vars if configured
+  // Use the user's own email + password + provider SMTP, falling back to server env vars if configured
   const userEmail = isEmail(raw.senderEmail) ? raw.senderEmail.trim().toLowerCase() : '';
-  const userPass =
-    typeof raw.senderAppPassword === 'string' ? raw.senderAppPassword.replace(/\s/g, '') : '';
+  const userPass = typeof raw.senderAppPassword === 'string' ? raw.senderAppPassword.trim() : '';
 
-  const smtpUser = userEmail && userPass ? userEmail : (process.env.GMAIL_USER?.trim() || '');
-  const smtpPass = userEmail && userPass ? userPass : (process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '') || '');
+  const usingUserCreds = Boolean(userEmail && userPass);
+  const smtpHost = usingUserCreds ? cleanSmtpHost(raw.smtpHost) : 'smtp.gmail.com';
+  if (!smtpHost) {
+    seenKeys.delete(dedupeKey);
+    error(
+      res,
+      400,
+      'invalid_smtp_host',
+      'Enter a valid SMTP server hostname in Settings (for example, mail.yourdomain.com).',
+      false,
+    );
+    return;
+  }
+  const smtpPort = usingUserCreds ? cleanSmtpPort(raw.smtpPort, smtpHost) : 465;
+  const smtpUser = usingUserCreds ? userEmail : (process.env.GMAIL_USER?.trim() || '');
+  const smtpPass = usingUserCreds ? userPass : (process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '') || '');
 
   if (!smtpUser || !smtpPass) {
     seenKeys.delete(dedupeKey);
@@ -215,16 +256,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res,
       400,
       'missing_sender_credentials',
-      'Enter your Gmail address and 16-character Gmail App Password in Settings to send directly from your email.',
+      'Enter your email address and password in Settings to send directly from your email account.',
       false,
     );
     return;
   }
 
-  const transport = createGmailTransport(smtpUser, smtpPass);
+  const transport = createSmtpTransport(smtpHost, smtpPort, smtpUser, smtpPass);
   if (!transport) {
     seenKeys.delete(dedupeKey);
-    error(res, 400, 'missing_sender_credentials', 'Invalid Gmail credentials.', false);
+    error(res, 400, 'missing_sender_credentials', 'Invalid email credentials.', false);
     return;
   }
 
@@ -271,7 +312,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res,
       502,
       'mail_failed',
-      'Gmail could not send this email. Make sure your Gmail address and 16-character Gmail App Password in Settings are correct.',
+      'Your email provider could not sign in. Check your email address, App Password / SMTP password, and provider settings.',
       true,
     );
   } finally {
