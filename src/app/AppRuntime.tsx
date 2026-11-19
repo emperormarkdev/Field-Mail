@@ -95,7 +95,6 @@ export function AppRuntime({ children }: { children: ReactNode }) {
     navigator.serviceWorker?.addEventListener('controllerchange', onControllerChange);
 
     const onInstallPrompt = (event: Event) => {
-      event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
     };
     window.addEventListener('beforeinstallprompt', onInstallPrompt);
