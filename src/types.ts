@@ -115,7 +115,7 @@ export interface Branding {
   logoAlign?: LogoAlignment;
 }
 
-export type EmailProvider = 'gmail' | 'outlook' | 'yahoo' | 'zoho' | 'proton' | 'custom';
+export type EmailProvider = 'auto' | 'gmail' | 'outlook' | 'yahoo' | 'zoho' | 'proton' | 'custom';
 
 export interface Settings {
   id: 'app';

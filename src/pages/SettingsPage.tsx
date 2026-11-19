@@ -57,9 +57,10 @@ export function SettingsPage() {
   const [myName, setMyName] = useState('');
   const [gmail, setGmail] = useState('');
   const [accessKey, setAccessKey] = useState('');
-  const [emailProvider, setEmailProvider] = useState<EmailProvider>('gmail');
+  const [emailProvider, setEmailProvider] = useState<EmailProvider>('auto');
   const [smtpHost, setSmtpHost] = useState('');
   const [smtpPort, setSmtpPort] = useState<number>(465);
+  const [showAdvancedMail, setShowAdvancedMail] = useState(false);
   const [siteName, setSiteName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [testing, setTesting] = useState(false);
@@ -69,9 +70,11 @@ export function SettingsPage() {
     setMyName(settings.myName);
     setGmail(settings.gmail);
     setAccessKey(settings.accessKey);
-    setEmailProvider(settings.emailProvider ?? 'gmail');
+    const savedProvider = settings.emailProvider ?? 'auto';
+    setEmailProvider(savedProvider);
     setSmtpHost(settings.smtpHost ?? '');
     setSmtpPort(settings.smtpPort ?? 465);
+    if (savedProvider !== 'auto') setShowAdvancedMail(true);
     setSiteName(settings.defaultSiteName);
     setCompanyName(settings.branding.companyName);
   }, [settings]);
@@ -81,14 +84,7 @@ export function SettingsPage() {
   };
 
   const handleEmailBlur = () => {
-    const clean = gmail.trim();
-    const inferred = inferProviderFromEmail(clean);
-    if (inferred && inferred !== emailProvider) {
-      setEmailProvider(inferred);
-      void update({ gmail: clean, emailProvider: inferred });
-    } else {
-      void update({ gmail: clean });
-    }
+    void update({ gmail: gmail.trim() });
   };
 
   const selectProvider = (next: EmailProvider) => {
@@ -96,7 +92,9 @@ export function SettingsPage() {
     void update({ emailProvider: next });
   };
 
-  const activeProvider = getProviderPreset(emailProvider);
+  const displayPreset = getProviderPreset(
+    emailProvider === 'auto' ? (inferProviderFromEmail(gmail) ?? 'auto') : emailProvider,
+  );
 
   const sendTest = async () => {
     const cleanEmail = gmail.trim();
@@ -112,7 +110,7 @@ export function SettingsPage() {
       return;
     }
     if (!cleanKey) {
-      toast.show({ message: `Enter your ${activeProvider.passwordLabel} first.`, tone: 'error' });
+      toast.show({ message: `Enter your ${displayPreset.passwordLabel} first.`, tone: 'error' });
       return;
     }
     if (emailProvider === 'custom' && !resolvedHost) {
@@ -245,7 +243,7 @@ export function SettingsPage() {
           <Card>
             <CardHeader
               title="Your details & email"
-              description="Works with Gmail, Outlook, Yahoo, Zoho, Proton, or any company domain email. Reports send directly from your account."
+              description="Works with Gmail, Outlook, Yahoo, Zoho, Proton, or company domain emails. Your mail server is detected automatically."
             />
             <CardBody className="flex flex-col gap-4 pt-3">
               <Field label="Your name" htmlFor="setting-name">
@@ -271,64 +269,7 @@ export function SettingsPage() {
                 />
               </Field>
 
-              <div>
-                <p className="mb-1.5 text-body-medium text-ink">Email provider</p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="group" aria-label="Email provider">
-                  {EMAIL_PROVIDERS.map((provider) => {
-                    const active = emailProvider === provider.id;
-                    return (
-                      <button
-                        key={provider.id}
-                        type="button"
-                        onClick={() => selectProvider(provider.id)}
-                        aria-pressed={active}
-                        className={cn(
-                          'press flex min-h-9 cursor-pointer items-center justify-center rounded-field border px-2 text-center text-body-2-semibold',
-                          active
-                            ? 'border-accent/45 bg-accent-soft text-accent'
-                            : 'border-line-strong bg-surface text-muted hover:bg-raised hover:text-ink',
-                        )}
-                      >
-                        {provider.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {emailProvider === 'custom' && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="sm:col-span-2">
-                    <Field label="SMTP server" htmlFor="setting-smtp-host">
-                      <Input
-                        id="setting-smtp-host"
-                        value={smtpHost}
-                        onChange={(event) => setSmtpHost(event.target.value)}
-                        onBlur={() => saveText('smtpHost', smtpHost)}
-                        placeholder="mail.yourdomain.com"
-                      />
-                    </Field>
-                  </div>
-                  <Field label="Port" htmlFor="setting-smtp-port">
-                    <select
-                      id="setting-smtp-port"
-                      value={smtpPort}
-                      onChange={(event) => {
-                        const port = Number(event.target.value);
-                        setSmtpPort(port);
-                        void update({ smtpPort: port });
-                      }}
-                      className="min-h-11 w-full rounded-field border border-line-strong bg-surface px-3 text-body-regular text-ink outline-none focus:border-accent"
-                    >
-                      <option value={465}>465 (SSL)</option>
-                      <option value={587}>587 (TLS)</option>
-                      <option value={2525}>2525 (TLS)</option>
-                    </select>
-                  </Field>
-                </div>
-              )}
-
-              <Field label={activeProvider.passwordLabel} htmlFor="setting-app-password">
+              <Field label={displayPreset.passwordLabel} htmlFor="setting-app-password">
                 <Input
                   id="setting-app-password"
                   type="password"
@@ -336,25 +277,98 @@ export function SettingsPage() {
                   onChange={(event) => setAccessKey(event.target.value)}
                   onBlur={() => saveText('accessKey', accessKey)}
                   autoComplete="off"
-                  placeholder={activeProvider.passwordPlaceholder}
+                  placeholder={displayPreset.passwordPlaceholder}
                 />
                 <p className="mt-1.5 text-caption-1-regular text-muted">
                   Saved only on this device.
-                  {activeProvider.helpUrl && activeProvider.helpLabel && (
+                  {displayPreset.helpUrl && displayPreset.helpLabel ? (
                     <>
                       {' '}
                       <a
-                        href={activeProvider.helpUrl}
+                        href={displayPreset.helpUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="font-medium text-accent underline underline-offset-2"
                       >
-                        {activeProvider.helpLabel}
+                        {displayPreset.helpLabel}
                       </a>
                     </>
+                  ) : (
+                    ' Mail server & port are detected automatically from your email address.'
                   )}
                 </p>
               </Field>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedMail((v) => !v)}
+                  className="cursor-pointer text-caption-1-semibold text-muted underline underline-offset-2 hover:text-ink"
+                >
+                  {showAdvancedMail ? 'Hide manual server settings' : 'Advanced: manual server settings (optional)'}
+                </button>
+
+                {showAdvancedMail && (
+                  <div className="mt-3 flex flex-col gap-3 rounded-field border border-line bg-raised p-3">
+                    <div>
+                      <p className="mb-1.5 text-body-2-medium text-ink">Email provider</p>
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3" role="group" aria-label="Email provider">
+                        {EMAIL_PROVIDERS.map((provider) => {
+                          const active = emailProvider === provider.id;
+                          return (
+                            <button
+                              key={provider.id}
+                              type="button"
+                              onClick={() => selectProvider(provider.id)}
+                              aria-pressed={active}
+                              className={cn(
+                                'press flex min-h-9 cursor-pointer items-center justify-center rounded-field border px-2 text-center text-caption-1-semibold',
+                                active
+                                  ? 'border-accent/45 bg-accent-soft text-accent'
+                                  : 'border-line-strong bg-surface text-muted hover:bg-raised hover:text-ink',
+                              )}
+                            >
+                              {provider.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {emailProvider === 'custom' && (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="sm:col-span-2">
+                          <Field label="SMTP server" htmlFor="setting-smtp-host">
+                            <Input
+                              id="setting-smtp-host"
+                              value={smtpHost}
+                              onChange={(event) => setSmtpHost(event.target.value)}
+                              onBlur={() => saveText('smtpHost', smtpHost)}
+                              placeholder="mail.yourdomain.com"
+                            />
+                          </Field>
+                        </div>
+                        <Field label="Port" htmlFor="setting-smtp-port">
+                          <select
+                            id="setting-smtp-port"
+                            value={smtpPort}
+                            onChange={(event) => {
+                              const port = Number(event.target.value);
+                              setSmtpPort(port);
+                              void update({ smtpPort: port });
+                            }}
+                            className="min-h-11 w-full rounded-field border border-line-strong bg-surface px-3 text-body-regular text-ink outline-none focus:border-accent"
+                          >
+                            <option value={465}>465 (SSL)</option>
+                            <option value={587}>587 (TLS)</option>
+                            <option value={2525}>2525 (TLS)</option>
+                          </select>
+                        </Field>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <Field label="Usual site name" htmlFor="setting-site">
                 <Input
                   id="setting-site"

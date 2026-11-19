@@ -1,3 +1,4 @@
+import { promises as dns } from 'node:dns';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
 
@@ -72,7 +73,7 @@ const HOST_RE = /^(?=.{4,120}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{
 const ALLOWED_PORTS = new Set([465, 587, 2525]);
 
 function cleanSmtpHost(value: unknown): string | null {
-  if (value === undefined || value === null || value === '') return 'smtp.gmail.com';
+  if (value === undefined || value === null || value === '') return '';
   if (typeof value !== 'string') return null;
   const host = value.trim().toLowerCase();
   if (!HOST_RE.test(host)) return null;
@@ -89,7 +90,104 @@ function cleanSmtpHost(value: unknown): string | null {
 
 function cleanSmtpPort(value: unknown, host: string): number {
   if (typeof value === 'number' && ALLOWED_PORTS.has(value)) return value;
-  return host === 'smtp.office365.com' || host === 'smtp.protonmail.ch' ? 587 : 465;
+  return host === 'smtp.office365.com' || host === 'smtp.protonmail.ch' || host === 'smtp.mail.me.com'
+    ? 587
+    : 465;
+}
+
+interface SmtpCandidate {
+  host: string;
+  port: number;
+}
+
+const DIRECT_DOMAIN_SMTP: Record<string, SmtpCandidate> = {
+  'gmail.com': { host: 'smtp.gmail.com', port: 465 },
+  'googlemail.com': { host: 'smtp.gmail.com', port: 465 },
+  'outlook.com': { host: 'smtp.office365.com', port: 587 },
+  'hotmail.com': { host: 'smtp.office365.com', port: 587 },
+  'live.com': { host: 'smtp.office365.com', port: 587 },
+  'msn.com': { host: 'smtp.office365.com', port: 587 },
+  'yahoo.com': { host: 'smtp.mail.yahoo.com', port: 465 },
+  'ymail.com': { host: 'smtp.mail.yahoo.com', port: 465 },
+  'zoho.com': { host: 'smtp.zoho.com', port: 465 },
+  'zohomail.com': { host: 'smtp.zoho.com', port: 465 },
+  'proton.me': { host: 'smtp.protonmail.ch', port: 587 },
+  'protonmail.com': { host: 'smtp.protonmail.ch', port: 587 },
+  'pm.me': { host: 'smtp.protonmail.ch', port: 587 },
+  'icloud.com': { host: 'smtp.mail.me.com', port: 587 },
+  'me.com': { host: 'smtp.mail.me.com', port: 587 },
+  'fastmail.com': { host: 'smtp.fastmail.com', port: 465 },
+};
+
+function mapMxToSmtp(mxHost: string): SmtpCandidate | null {
+  const mx = mxHost.toLowerCase().replace(/\.$/, '');
+  if (mx.includes('google.com') || mx.includes('googlemail.com')) {
+    return { host: 'smtp.gmail.com', port: 465 };
+  }
+  if (mx.includes('outlook.com') || mx.includes('microsoft.com')) {
+    return { host: 'smtp.office365.com', port: 587 };
+  }
+  if (mx.includes('yahoodns.net') || mx.includes('yahoo.com')) {
+    return { host: 'smtp.mail.yahoo.com', port: 465 };
+  }
+  if (mx.includes('zoho.eu')) return { host: 'smtp.zoho.eu', port: 465 };
+  if (mx.includes('zoho.in')) return { host: 'smtp.zoho.in', port: 465 };
+  if (mx.includes('zoho.')) return { host: 'smtp.zoho.com', port: 465 };
+  if (mx.includes('protonmail.ch')) return { host: 'smtp.protonmail.ch', port: 587 };
+  if (mx.includes('privateemail.com')) return { host: 'mail.privateemail.com', port: 465 };
+  if (mx.includes('secureserver.net')) return { host: 'smtpout.secureserver.net', port: 465 };
+  if (mx.includes('titan.email')) return { host: 'smtp.titan.email', port: 465 };
+  if (mx.includes('messagingengine.com') || mx.includes('fastmail.')) {
+    return { host: 'smtp.fastmail.com', port: 465 };
+  }
+  if (mx.includes('icloud.com') || mx.includes('apple.com')) {
+    return { host: 'smtp.mail.me.com', port: 587 };
+  }
+  if (mx.includes('yandex.')) return { host: 'smtp.yandex.com', port: 465 };
+  return null;
+}
+
+async function detectSmtpCandidates(email: string): Promise<SmtpCandidate[]> {
+  const domain = email.split('@')[1]?.toLowerCase() || '';
+  if (!domain) return [{ host: 'smtp.gmail.com', port: 465 }];
+
+  const direct = DIRECT_DOMAIN_SMTP[domain];
+  if (direct) return [direct];
+  if (domain.startsWith('yahoo.')) return [{ host: 'smtp.mail.yahoo.com', port: 465 }];
+
+  const candidates: SmtpCandidate[] = [];
+  try {
+    const records = await Promise.race([
+      dns.resolveMx(domain),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('mx_timeout')), 3000)),
+    ]);
+    records.sort((a, b) => a.priority - b.priority);
+    for (const rec of records) {
+      const mapped = mapMxToSmtp(rec.exchange);
+      if (mapped && !candidates.some((c) => c.host === mapped.host && c.port === mapped.port)) {
+        candidates.push(mapped);
+      }
+    }
+    if (candidates.length > 0) return candidates;
+  } catch {
+    // Fall through to standard company mail server conventions
+  }
+
+  const mailHost = cleanSmtpHost(`mail.${domain}`);
+  if (mailHost) {
+    candidates.push({ host: mailHost, port: 465 });
+    candidates.push({ host: mailHost, port: 587 });
+  }
+  const smtpSub = cleanSmtpHost(`smtp.${domain}`);
+  if (smtpSub) {
+    candidates.push({ host: smtpSub, port: 587 });
+  }
+  return candidates.length > 0 ? candidates : [{ host: 'smtp.gmail.com', port: 465 }];
+}
+
+function isAuthError(err: unknown): boolean {
+  const e = err as { code?: string; responseCode?: number } | null;
+  return e?.code === 'EAUTH' || e?.responseCode === 535 || e?.responseCode === 534;
 }
 
 function createSmtpTransport(host: string, port: number, user: string, rawPass: string) {
@@ -102,9 +200,9 @@ function createSmtpTransport(host: string, port: number, user: string, rawPass: 
     secure,
     requireTLS: !secure,
     auth: { user, pass },
-    connectionTimeout: 15_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 20_000,
+    connectionTimeout: 10_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 18_000,
   });
 }
 
@@ -229,13 +327,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   seenKeys.set(dedupeKey, Date.now() + DEDUPE_TTL_MS);
 
-  // Use the user's own email + password + provider SMTP, falling back to server env vars if configured
+  // Use the user's own email + password + auto-detected or custom SMTP, falling back to server env vars if configured
   const userEmail = isEmail(raw.senderEmail) ? raw.senderEmail.trim().toLowerCase() : '';
   const userPass = typeof raw.senderAppPassword === 'string' ? raw.senderAppPassword.trim() : '';
 
   const usingUserCreds = Boolean(userEmail && userPass);
-  const smtpHost = usingUserCreds ? cleanSmtpHost(raw.smtpHost) : 'smtp.gmail.com';
-  if (!smtpHost) {
+  const explicitHost = usingUserCreds ? cleanSmtpHost(raw.smtpHost) : 'smtp.gmail.com';
+  if (explicitHost === null) {
     seenKeys.delete(dedupeKey);
     error(
       res,
@@ -246,7 +344,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     return;
   }
-  const smtpPort = usingUserCreds ? cleanSmtpPort(raw.smtpPort, smtpHost) : 465;
+
   const smtpUser = usingUserCreds ? userEmail : (process.env.GMAIL_USER?.trim() || '');
   const smtpPass = usingUserCreds ? userPass : (process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '') || '');
 
@@ -262,12 +360,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const transport = createSmtpTransport(smtpHost, smtpPort, smtpUser, smtpPass);
-  if (!transport) {
-    seenKeys.delete(dedupeKey);
-    error(res, 400, 'missing_sender_credentials', 'Invalid email credentials.', false);
-    return;
-  }
+  const candidates: SmtpCandidate[] = explicitHost
+    ? [{ host: explicitHost, port: cleanSmtpPort(raw.smtpPort, explicitHost) }]
+    : await detectSmtpCandidates(smtpUser);
 
   const filename =
     typeof pdf.filename === 'string' && pdf.filename.length > 0
@@ -280,42 +375,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : '';
   const fromDisplay = senderName || 'Fieldmail';
 
-  try {
-    await transport.sendMail({
-      from: `"${fromDisplay}" <${smtpUser}>`,
-      replyTo: userEmail || smtpUser,
-      to,
-      cc,
-      bcc,
-      subject: subject.trim(),
-      text: typeof raw.text === 'string' ? raw.text.slice(0, 100_000) : undefined,
-      html,
-      attachments: [
-        {
-          filename,
-          content: pdfBuffer,
-          contentType: 'application/pdf',
-        },
-        ...photoBuffers,
-      ],
-    });
+  let lastError: unknown = null;
+  for (const candidate of candidates) {
+    const transport = createSmtpTransport(candidate.host, candidate.port, smtpUser, smtpPass);
+    if (!transport) continue;
+    try {
+      await transport.sendMail({
+        from: `"${fromDisplay}" <${smtpUser}>`,
+        replyTo: userEmail || smtpUser,
+        to,
+        cc,
+        bcc,
+        subject: subject.trim(),
+        text: typeof raw.text === 'string' ? raw.text.slice(0, 100_000) : undefined,
+        html,
+        attachments: [
+          {
+            filename,
+            content: pdfBuffer,
+            contentType: 'application/pdf',
+          },
+          ...photoBuffers,
+        ],
+      });
 
-    res.status(200).json({
-      ok: true,
-      reportId,
-      partIndex,
-      partCount,
-    });
-  } catch {
-    seenKeys.delete(dedupeKey);
-    error(
-      res,
-      502,
-      'mail_failed',
-      'Your email provider could not sign in. Check your email address, App Password / SMTP password, and provider settings.',
-      true,
-    );
-  } finally {
-    transport.close();
+      res.status(200).json({
+        ok: true,
+        reportId,
+        partIndex,
+        partCount,
+      });
+      return;
+    } catch (err) {
+      lastError = err;
+      if (isAuthError(err)) break;
+    } finally {
+      transport.close();
+    }
   }
+
+  seenKeys.delete(dedupeKey);
+  const authFailed = isAuthError(lastError);
+  error(
+    res,
+    502,
+    'mail_failed',
+    authFailed
+      ? 'Sign-in was rejected by your email provider. Make sure you entered the right email and App Password (or email password).'
+      : 'Could not connect to your email server automatically. Open Advanced server settings in Settings to enter your mail server.',
+    true,
+  );
 }

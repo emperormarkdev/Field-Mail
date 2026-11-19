@@ -13,6 +13,14 @@ export interface EmailProviderPreset {
 
 export const EMAIL_PROVIDERS: EmailProviderPreset[] = [
   {
+    id: 'auto',
+    label: 'Auto-detect',
+    host: '',
+    port: 465,
+    passwordLabel: 'Email / App Password',
+    passwordPlaceholder: 'Your email password or App Password',
+  },
+  {
     id: 'gmail',
     label: 'Gmail / Google',
     host: 'smtp.gmail.com',
@@ -64,7 +72,7 @@ export const EMAIL_PROVIDERS: EmailProviderPreset[] = [
   },
   {
     id: 'custom',
-    label: 'Custom domain',
+    label: 'Custom server',
     host: '',
     port: 465,
     passwordLabel: 'Email / SMTP Password',
@@ -99,16 +107,18 @@ export function inferProviderFromEmail(email: string): EmailProvider | null {
 }
 
 export function resolveSmtpConfig(settings: Pick<Settings, 'emailProvider' | 'smtpHost' | 'smtpPort'>): {
-  smtpHost: string;
-  smtpPort: number;
+  smtpHost?: string;
+  smtpPort?: number;
 } {
-  const provider = settings.emailProvider ?? 'gmail';
+  const provider = settings.emailProvider ?? 'auto';
+  if (provider === 'auto') {
+    return { smtpHost: undefined, smtpPort: undefined };
+  }
   if (provider === 'custom') {
     const host = (settings.smtpHost ?? '').trim().toLowerCase();
     const port = settings.smtpPort === 587 || settings.smtpPort === 2525 ? settings.smtpPort : 465;
-    return { smtpHost: host, smtpPort: port };
+    return { smtpHost: host || undefined, smtpPort: host ? port : undefined };
   }
   const preset = getProviderPreset(provider);
   return { smtpHost: preset.host, smtpPort: preset.port };
 }
-
