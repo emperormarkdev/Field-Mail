@@ -192,11 +192,11 @@ export function SettingsPage() {
   const currentLogoAlign: LogoAlignment = settings?.branding.logoAlign ?? 'left';
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-10 sm:px-6">
+    <div className="mx-auto w-full max-w-[1120px] overflow-x-hidden px-4 pb-10 sm:px-6">
       <PageHeader title="Settings" />
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
           <Card>
             <CardHeader
               title="Your email account"
@@ -356,7 +356,7 @@ export function SettingsPage() {
           </Card>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           <Card>
             <CardHeader title="Company header & logo" description="Shown at the top of your PDF reports." />
             <CardBody className="flex flex-col gap-4 pt-3">

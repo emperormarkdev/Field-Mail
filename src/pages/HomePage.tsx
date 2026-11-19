@@ -28,7 +28,7 @@ export function HomePage() {
   const latestDraft = allReports?.find((r) => r.status === 'draft') ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-8 sm:px-6">
+    <div className="mx-auto w-full max-w-[1120px] overflow-x-hidden px-4 pb-8 sm:px-6">
       <PageHeader
         title="Home"
         actions={
@@ -45,13 +45,13 @@ export function HomePage() {
       {latestDraft && (
         <Link
           to={`/reports/${latestDraft.id}/edit`}
-          className="press mb-5 flex items-center justify-between gap-3 rounded-card border border-accent/35 bg-accent-soft px-3.5 py-3 sm:px-4"
+          className="press mb-5 flex w-full min-w-0 items-center justify-between gap-3 rounded-card border border-accent/35 bg-accent-soft px-3.5 py-3 sm:px-4"
         >
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-white">
               <RiDraftLine aria-hidden className="size-4.5" />
             </span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-body-semibold text-ink">
                 Continue: {latestDraft.templateName}
               </p>
@@ -68,8 +68,8 @@ export function HomePage() {
         </Link>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-        <section aria-labelledby="templates-heading">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-start">
+        <section className="min-w-0" aria-labelledby="templates-heading">
           <div className="mb-2.5 flex items-center justify-between gap-3">
             <h2 id="templates-heading" className="text-body-semibold text-ink">
               Templates
@@ -137,7 +137,7 @@ export function HomePage() {
           )}
         </section>
 
-        <section aria-labelledby="recent-heading">
+        <section className="min-w-0" aria-labelledby="recent-heading">
           <div className="mb-2.5 flex items-center justify-between gap-3">
             <h2 id="recent-heading" className="text-body-semibold text-ink">
               Recent reports

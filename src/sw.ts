@@ -16,6 +16,10 @@ declare const self: ServiceWorkerGlobalScope & {
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
+self.addEventListener('install', () => {
+  void self.skipWaiting();
+});
+
 // Every navigation resolves to the cached shell; API calls stay untouched.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('index.html'), {
