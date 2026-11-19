@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ExternalLink, Mail, Plus, UserPlus, WifiOff } from 'lucide-react';
-import type { Recipient, RecipientAssignment, Report, Settings } from '../types';
-import { db, updateSettings } from '../db/db';
+import { Plus, UserPlus, WifiOff } from 'lucide-react';
+import type { Recipient, RecipientAssignment, Report } from '../types';
+import { db } from '../db/db';
 import { Sheet } from './ui/Sheet';
 import { Button } from './ui/Button';
 import { Field, Input } from './ui/Field';
-import { Switch } from './ui/Switch';
 import { useOnline } from '../hooks/useOnline';
 import { buildSubject } from '../lib/email';
 import { newId } from '../lib/id';
@@ -20,7 +19,6 @@ export function SendSheet({
   onClose,
   report,
   recipients,
-  settings,
   sending,
   onSend,
 }: {
@@ -28,21 +26,15 @@ export function SendSheet({
   onClose: () => void;
   report: Report;
   recipients: Recipient[];
-  settings: Settings;
   sending: boolean;
-  onSend: (assignment: RecipientAssignment, subject: string, sendMeCopy: boolean) => void;
+  onSend: (assignment: RecipientAssignment, subject: string) => void;
 }) {
   const online = useOnline();
   const [assignment, setAssignment] = useState<RecipientAssignment>(() =>
     initialAssignment(report, recipients),
   );
   const [subject, setSubject] = useState(() => report.subject || buildSubject(report));
-  const [sendMeCopy, setSendMeCopy] = useState(settings.sendMeCopy);
   const [error, setError] = useState<string | null>(null);
-
-  const [senderGmail, setSenderGmail] = useState(settings.gmail);
-  const [senderAppPass, setSenderAppPass] = useState(settings.accessKey);
-  const needsSenderSetup = !settings.gmail.trim() || !settings.accessKey.trim();
 
   const [addingPerson, setAddingPerson] = useState(false);
   const [newName, setNewName] = useState('');
@@ -53,9 +45,6 @@ export function SendSheet({
     if (!open) return;
     setAssignment(initialAssignment(report, recipients));
     setSubject(report.subject || buildSubject(report));
-    setSendMeCopy(settings.sendMeCopy);
-    setSenderGmail(settings.gmail);
-    setSenderAppPass(settings.accessKey);
     setError(null);
     setAddingPerson(recipients.length === 0);
     setNewName('');
@@ -121,21 +110,7 @@ export function SendSheet({
     setError(null);
   };
 
-  const send = async () => {
-    if (needsSenderSetup) {
-      const cleanEmail = senderGmail.trim().toLowerCase();
-      const cleanPass = senderAppPass.trim();
-      if (!isValidEmail(cleanEmail)) {
-        setError('Enter your Gmail address so the report can be sent from your email.');
-        return;
-      }
-      if (!cleanPass) {
-        setError('Enter your 16-letter Gmail App Password.');
-        return;
-      }
-      await updateSettings({ gmail: cleanEmail, accessKey: cleanPass });
-    }
-
+  const send = () => {
     if (selected === 0) {
       setError('Select at least one person to receive this report.');
       return;
@@ -145,7 +120,7 @@ export function SendSheet({
       return;
     }
     setError(null);
-    onSend(assignment, subject.trim(), sendMeCopy);
+    onSend(assignment, subject.trim());
   };
 
   return (
@@ -167,50 +142,13 @@ export function SendSheet({
               {error}
             </p>
           )}
-          <Button variant="primary" size="lg" fullWidth onClick={() => void send()} loading={sending}>
+          <Button variant="primary" size="lg" fullWidth onClick={send} loading={sending}>
             {online ? 'Send report now' : 'Save & send when online'}
           </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-4">
-        {needsSenderSetup && (
-          <div className="flex flex-col gap-3 rounded-card border border-accent/35 bg-accent-soft p-3.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-body-2-semibold text-ink">
-                <Mail aria-hidden className="size-4 text-accent" />
-                Send from your Gmail account (one-time setup)
-              </span>
-            </div>
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              <Input
-                type="email"
-                inputMode="email"
-                value={senderGmail}
-                onChange={(event) => setSenderGmail(event.target.value)}
-                placeholder="Your Gmail (you@gmail.com)"
-                aria-label="Your Gmail address"
-              />
-              <Input
-                type="password"
-                value={senderAppPass}
-                onChange={(event) => setSenderAppPass(event.target.value)}
-                placeholder="16-letter Gmail App Password"
-                aria-label="Your 16-letter Gmail App Password"
-              />
-            </div>
-            <a
-              href="https://myaccount.google.com/apppasswords"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-caption-1-semibold text-accent hover:underline"
-            >
-              Get your 16-letter App Password from Google
-              <ExternalLink aria-hidden className="size-3.5" />
-            </a>
-          </div>
-        )}
-
         <Field label="Email subject" htmlFor="send-subject">
           <Input
             id="send-subject"
@@ -356,16 +294,6 @@ export function SendSheet({
             </ul>
           )}
         </section>
-
-        <div className="rounded-card border border-line bg-raised p-3.5">
-          <Switch
-            checked={sendMeCopy}
-            onChange={setSendMeCopy}
-            label="Send a copy to my email"
-            description={senderGmail || settings.gmail || undefined}
-            id="send-me-copy"
-          />
-        </div>
       </div>
     </Sheet>
   );

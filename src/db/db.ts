@@ -77,7 +77,21 @@ export async function getTemplate(id: string): Promise<Template | undefined> {
 
 export async function getSettings(): Promise<Settings> {
   const existing = await db.settings.get('app');
-  if (existing) return existing;
+  if (existing) {
+    if (
+      existing.accessKey === 'fieldmail2026' ||
+      existing.gmail === 'markchukwudiokezie@gmail.com'
+    ) {
+      const cleaned: Settings = {
+        ...existing,
+        gmail: '',
+        accessKey: '',
+      };
+      await db.settings.put(cleaned);
+      return cleaned;
+    }
+    return existing;
+  }
   await db.settings.put(DEFAULT_SETTINGS);
   return DEFAULT_SETTINGS;
 }

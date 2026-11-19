@@ -6,9 +6,6 @@ import {
   AlignLeft,
   AlignRight,
   Download,
-  ExternalLink,
-  Eye,
-  EyeOff,
   Monitor,
   Moon,
   Send,
@@ -53,8 +50,7 @@ export function SettingsPage() {
 
   const [myName, setMyName] = useState('');
   const [gmail, setGmail] = useState('');
-  const [appPassword, setAppPassword] = useState('');
-  const [showKey, setShowKey] = useState(false);
+  const [accessKey, setAccessKey] = useState('');
   const [siteName, setSiteName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [testing, setTesting] = useState(false);
@@ -63,28 +59,28 @@ export function SettingsPage() {
     if (!settings) return;
     setMyName(settings.myName);
     setGmail(settings.gmail);
-    setAppPassword(settings.accessKey);
+    setAccessKey(settings.accessKey);
     setSiteName(settings.defaultSiteName);
     setCompanyName(settings.branding.companyName);
   }, [settings]);
 
-  const saveText = (field: 'myName' | 'gmail' | 'defaultSiteName', value: string) => {
+  const saveText = (field: 'myName' | 'gmail' | 'accessKey' | 'defaultSiteName', value: string) => {
     void update({ [field]: value.trim() });
   };
 
   const sendTest = async () => {
     const cleanEmail = gmail.trim();
-    const cleanPass = appPassword.trim();
+    const cleanKey = accessKey.trim();
     if (!cleanEmail) {
       toast.show({ message: 'Enter your Gmail address first.', tone: 'error' });
       return;
     }
-    if (!cleanPass) {
+    if (!cleanKey) {
       toast.show({ message: 'Enter your 16-character Gmail App Password first.', tone: 'error' });
       return;
     }
 
-    await update({ myName: myName.trim(), gmail: cleanEmail, accessKey: cleanPass });
+    await update({ myName: myName.trim(), gmail: cleanEmail, accessKey: cleanKey });
 
     setTesting(true);
     try {
@@ -97,12 +93,12 @@ export function SettingsPage() {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10.5);
       doc.text(
-        'Your Gmail account is connected. Reports you send from Fieldmail will be sent directly from your own email address with the printable PDF attached.',
+        'Your email is ready. Reports you send from Fieldmail will arrive with the full written text in the email body and a printable PDF attached.',
         18,
         42,
         { maxWidth: 174 },
       );
-      doc.text(`Sent from & to: ${cleanEmail}`, 18, 58);
+      doc.text(`Sent to: ${cleanEmail}`, 18, 58);
       const buffer = doc.output('arraybuffer');
 
       await postPart({
@@ -115,13 +111,13 @@ export function SettingsPage() {
         bcc: [],
         senderName: myName.trim() || undefined,
         senderEmail: cleanEmail,
-        senderAppPassword: cleanPass,
+        senderAppPassword: cleanKey,
         subject: 'Fieldmail test email',
-        html: '<p>Your Gmail account is connected. Reports you send from Fieldmail will be sent directly from your own email address with the printable PDF attached.</p>',
+        html: '<p>Your email is ready. Reports you send from Fieldmail will arrive with the full written text in the email body and a printable PDF attached.</p>',
         pdf: { filename: 'fieldmail-test-report.pdf', base64: base64FromBuffer(buffer) },
       });
 
-      toast.show({ message: `Test email sent from ${cleanEmail}. Check your inbox.`, tone: 'success' });
+      toast.show({ message: `Test email sent from ${cleanEmail}. Check your Sent folder.`, tone: 'success' });
     } catch (error) {
       const message =
         error instanceof SendError ? error.message : 'Could not send test email.';
@@ -199,8 +195,8 @@ export function SettingsPage() {
         <div className="flex min-w-0 flex-col gap-4">
           <Card>
             <CardHeader
-              title="Your email account"
-              description="Connect your Gmail so reports are sent directly from your own email address."
+              title="Your details & Gmail"
+              description="Reports are sent directly from your Gmail so every sent report appears in your Sent folder."
             />
             <CardBody className="flex flex-col gap-4 pt-3">
               <Field label="Your name" htmlFor="setting-name">
@@ -225,49 +221,31 @@ export function SettingsPage() {
                   placeholder="you@gmail.com"
                 />
               </Field>
-              <div>
-                <Field
-                  label="Your Gmail App Password"
-                  htmlFor="setting-key"
-                  hint="A 16-letter code from Google that lets this app send emails from your Gmail. Stored only on your device."
-                >
-                  <div className="relative">
-                    <Input
-                      id="setting-key"
-                      type={showKey ? 'text' : 'password'}
-                      value={appPassword}
-                      onChange={(event) => setAppPassword(event.target.value)}
-                      onBlur={() => void update({ accessKey: appPassword.trim() })}
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="pe-10"
-                      placeholder="xxxx xxxx xxxx xxxx"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey((shown) => !shown)}
-                      aria-label={showKey ? 'Hide app password' : 'Show app password'}
-                      className="press absolute end-1 top-1 grid size-8 cursor-pointer place-items-center rounded-field text-muted hover:bg-raised"
-                    >
-                      {showKey ? (
-                        <EyeOff aria-hidden className="size-4" />
-                      ) : (
-                        <Eye aria-hidden className="size-4" />
-                      )}
-                    </button>
-                  </div>
-                </Field>
-                <a
-                  href="https://myaccount.google.com/apppasswords"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-caption-1-semibold text-accent hover:underline"
-                >
-                  Get your 16-letter App Password from Google
-                  <ExternalLink aria-hidden className="size-3.5" />
-                </a>
-              </div>
-
+              <Field
+                label="Gmail App Password"
+                htmlFor="setting-app-password"
+              >
+                <Input
+                  id="setting-app-password"
+                  type="password"
+                  value={accessKey}
+                  onChange={(event) => setAccessKey(event.target.value)}
+                  onBlur={() => saveText('accessKey', accessKey)}
+                  autoComplete="off"
+                  placeholder="xxxx xxxx xxxx xxxx"
+                />
+                <p className="mt-1.5 text-caption-1-regular text-muted">
+                  Saved only on this device.{' '}
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-accent underline underline-offset-2"
+                  >
+                    Get your 16-letter App Password from Google
+                  </a>
+                </p>
+              </Field>
               <Field label="Usual site name" htmlFor="setting-site">
                 <Input
                   id="setting-site"
@@ -296,15 +274,6 @@ export function SettingsPage() {
           <Card>
             <CardHeader title="Reports & photos" />
             <CardBody className="flex flex-col gap-3 pt-3">
-              <div className="rounded-field border border-line bg-raised p-3">
-                <Switch
-                  id="setting-copy"
-                  checked={settings?.sendMeCopy ?? false}
-                  onChange={(sendMeCopy) => void update({ sendMeCopy })}
-                  label="Send a copy to my email"
-                />
-              </div>
-
               <div className="rounded-field border border-line bg-raised p-3">
                 <Switch
                   id="setting-low-signal"

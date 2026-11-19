@@ -315,9 +315,8 @@ export function ReportFormPage() {
         }
         await db.photos.bulkAdd(stored);
         toast.show({
-          message: `${stored.length} ${stored.length === 1 ? 'photo' : 'photos'} added${
-            lowSignal ? ' (compact size)' : ''
-          }.`,
+          message: `${stored.length} ${stored.length === 1 ? 'photo' : 'photos'} added${lowSignal ? ' (compact size)' : ''
+            }.`,
           tone: 'success',
         });
         setErrors((previous) => {
@@ -386,7 +385,6 @@ export function ReportFormPage() {
   const handleSend = async (
     assignment: RecipientAssignment,
     subject: string,
-    sendMeCopy: boolean,
   ) => {
     const current = reportRef.current;
     if (!current) return;
@@ -404,7 +402,7 @@ export function ReportFormPage() {
         cc: lookup(assignment.cc),
         bcc: lookup(assignment.bcc),
       };
-      if (sendMeCopy && settings?.gmail) {
+      if (!settings?.accessKey?.trim() && settings?.gmail) {
         finalAssignment.bcc = Array.from(new Set([...finalAssignment.bcc, settings.gmail]));
       }
 
@@ -728,9 +726,8 @@ export function ReportFormPage() {
           onClose={() => setSendOpen(false)}
           report={report}
           recipients={recipients}
-          settings={settings}
           sending={sending}
-          onSend={(assignment, subject, copy) => void handleSend(assignment, subject, copy)}
+          onSend={(assignment, subject) => void handleSend(assignment, subject)}
         />
       )}
     </div>
