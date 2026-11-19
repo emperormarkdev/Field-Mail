@@ -37,9 +37,6 @@ async function runFlush(): Promise<FlushSummary> {
   }
 
   const settings = await getSettings();
-  if (!settings.accessKey) {
-    return { attempted: 0, sent: 0, failed: 0, blocked: 'no-key' };
-  }
 
   const now = Date.now();
   const items = (await db.outbox.toArray())

@@ -6,6 +6,7 @@ import {
   AlignLeft,
   AlignRight,
   Download,
+  ExternalLink,
   Eye,
   EyeOff,
   Monitor,
@@ -52,7 +53,7 @@ export function SettingsPage() {
 
   const [myName, setMyName] = useState('');
   const [gmail, setGmail] = useState('');
-  const [accessKey, setAccessKey] = useState('');
+  const [appPassword, setAppPassword] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [siteName, setSiteName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -62,7 +63,7 @@ export function SettingsPage() {
     if (!settings) return;
     setMyName(settings.myName);
     setGmail(settings.gmail);
-    setAccessKey(settings.accessKey);
+    setAppPassword(settings.accessKey);
     setSiteName(settings.defaultSiteName);
     setCompanyName(settings.branding.companyName);
   }, [settings]);
@@ -72,14 +73,18 @@ export function SettingsPage() {
   };
 
   const sendTest = async () => {
-    if (!settings?.gmail) {
-      toast.show({ message: 'Enter your email address first.', tone: 'error' });
+    const cleanEmail = gmail.trim();
+    const cleanPass = appPassword.trim();
+    if (!cleanEmail) {
+      toast.show({ message: 'Enter your Gmail address first.', tone: 'error' });
       return;
     }
-    if (!settings.accessKey) {
-      toast.show({ message: 'Enter your sending password first.', tone: 'error' });
+    if (!cleanPass) {
+      toast.show({ message: 'Enter your 16-character Gmail App Password first.', tone: 'error' });
       return;
     }
+
+    await update({ myName: myName.trim(), gmail: cleanEmail, accessKey: cleanPass });
 
     setTesting(true);
     try {
@@ -91,27 +96,32 @@ export function SettingsPage() {
       doc.line(18, 30, 192, 30);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10.5);
-      doc.text('Your email setup is working. Reports sent from the app will arrive with the full written text in the email and a printable PDF attached.', 18, 42, { maxWidth: 174 });
-      doc.text(`Sent to: ${settings.gmail}`, 18, 58);
+      doc.text(
+        'Your Gmail account is connected. Reports you send from Fieldmail will be sent directly from your own email address with the printable PDF attached.',
+        18,
+        42,
+        { maxWidth: 174 },
+      );
+      doc.text(`Sent from & to: ${cleanEmail}`, 18, 58);
       const buffer = doc.output('arraybuffer');
 
-      await postPart(
-        {
-          reportId: `test-${Date.now()}`,
-          attemptId: `test-${Date.now()}`,
-          partIndex: 0,
-          partCount: 1,
-          to: [settings.gmail],
-          cc: [],
-          bcc: [],
-          subject: 'Fieldmail test email',
-          html: '<p>Your email setup is working. Reports sent from Fieldmail will arrive with the full written text in the email and a printable PDF attached.</p>',
-          pdf: { filename: 'fieldmail-test-report.pdf', base64: base64FromBuffer(buffer) },
-        },
-        settings.accessKey,
-      );
+      await postPart({
+        reportId: `test-${Date.now()}`,
+        attemptId: `test-${Date.now()}`,
+        partIndex: 0,
+        partCount: 1,
+        to: [cleanEmail],
+        cc: [],
+        bcc: [],
+        senderName: myName.trim() || undefined,
+        senderEmail: cleanEmail,
+        senderAppPassword: cleanPass,
+        subject: 'Fieldmail test email',
+        html: '<p>Your Gmail account is connected. Reports you send from Fieldmail will be sent directly from your own email address with the printable PDF attached.</p>',
+        pdf: { filename: 'fieldmail-test-report.pdf', base64: base64FromBuffer(buffer) },
+      });
 
-      toast.show({ message: 'Test email sent. Check your inbox.', tone: 'success' });
+      toast.show({ message: `Test email sent from ${cleanEmail}. Check your inbox.`, tone: 'success' });
     } catch (error) {
       const message =
         error instanceof SendError ? error.message : 'Could not send test email.';
@@ -183,40 +193,15 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1120px] px-4 pb-10 sm:px-6">
-      <PageHeader title="Settings" sticky={false} />
+      <PageHeader title="Settings" />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="flex flex-col gap-4">
           <Card>
-            <CardHeader title="Appearance" />
-            <CardBody className="pt-3">
-              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Color theme">
-                {THEME_OPTIONS.map(({ mode, label, icon: Icon }) => {
-                  const active = currentTheme === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => void update({ theme: mode })}
-                      aria-pressed={active}
-                      className={cn(
-                        'press flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-field border text-body-semibold',
-                        active
-                          ? 'border-accent/45 bg-accent-soft text-accent'
-                          : 'border-line-strong bg-surface text-muted hover:bg-raised hover:text-ink',
-                      )}
-                    >
-                      <Icon aria-hidden className="size-4" />
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Your details" />
+            <CardHeader
+              title="Your email account"
+              description="Connect your Gmail so reports are sent directly from your own email address."
+            />
             <CardBody className="flex flex-col gap-4 pt-3">
               <Field label="Your name" htmlFor="setting-name">
                 <Input
@@ -228,7 +213,7 @@ export function SettingsPage() {
                   placeholder="Your full name"
                 />
               </Field>
-              <Field label="Your email address" htmlFor="setting-gmail">
+              <Field label="Your Gmail address" htmlFor="setting-gmail">
                 <Input
                   id="setting-gmail"
                   type="email"
@@ -240,6 +225,49 @@ export function SettingsPage() {
                   placeholder="you@gmail.com"
                 />
               </Field>
+              <div>
+                <Field
+                  label="Your Gmail App Password"
+                  htmlFor="setting-key"
+                  hint="A 16-letter code from Google that lets this app send emails from your Gmail. Stored only on your device."
+                >
+                  <div className="relative">
+                    <Input
+                      id="setting-key"
+                      type={showKey ? 'text' : 'password'}
+                      value={appPassword}
+                      onChange={(event) => setAppPassword(event.target.value)}
+                      onBlur={() => void update({ accessKey: appPassword.trim() })}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="pe-10"
+                      placeholder="xxxx xxxx xxxx xxxx"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey((shown) => !shown)}
+                      aria-label={showKey ? 'Hide app password' : 'Show app password'}
+                      className="press absolute end-1 top-1 grid size-8 cursor-pointer place-items-center rounded-field text-muted hover:bg-raised"
+                    >
+                      {showKey ? (
+                        <EyeOff aria-hidden className="size-4" />
+                      ) : (
+                        <Eye aria-hidden className="size-4" />
+                      )}
+                    </button>
+                  </div>
+                </Field>
+                <a
+                  href="https://myaccount.google.com/apppasswords"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-caption-1-semibold text-accent hover:underline"
+                >
+                  Get your 16-letter App Password from Google
+                  <ExternalLink aria-hidden className="size-3.5" />
+                </a>
+              </div>
+
               <Field label="Usual site name" htmlFor="setting-site">
                 <Input
                   id="setting-site"
@@ -253,44 +281,21 @@ export function SettingsPage() {
                   {settings?.lastSiteName && <option value={settings.lastSiteName} />}
                 </datalist>
               </Field>
+
+              <Button
+                variant="secondary"
+                loading={testing}
+                onClick={() => void sendTest()}
+                iconLeft={<Send aria-hidden className="size-4" />}
+              >
+                Send test email to myself
+              </Button>
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Email sending" />
-            <CardBody className="flex flex-col gap-4 pt-3">
-              <Field
-                label="Sending password"
-                htmlFor="setting-key"
-                hint="Enter the password used to authorize sending emails from this app."
-              >
-                <div className="relative">
-                  <Input
-                    id="setting-key"
-                    type={showKey ? 'text' : 'password'}
-                    value={accessKey}
-                    onChange={(event) => setAccessKey(event.target.value)}
-                    onBlur={() => void update({ accessKey: accessKey.trim() })}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="pe-10"
-                    placeholder="Enter sending password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey((shown) => !shown)}
-                    aria-label={showKey ? 'Hide password' : 'Show password'}
-                    className="press absolute end-1 top-1 grid size-8 place-items-center rounded-field text-muted hover:bg-raised"
-                  >
-                    {showKey ? (
-                      <EyeOff aria-hidden className="size-4" />
-                    ) : (
-                      <Eye aria-hidden className="size-4" />
-                    )}
-                  </button>
-                </div>
-              </Field>
-
+            <CardHeader title="Reports & photos" />
+            <CardBody className="flex flex-col gap-3 pt-3">
               <div className="rounded-field border border-line bg-raised p-3">
                 <Switch
                   id="setting-copy"
@@ -319,15 +324,34 @@ export function SettingsPage() {
                   description="Automatically stamps the site name, date, and time in the corner of newly added photos."
                 />
               </div>
+            </CardBody>
+          </Card>
 
-              <Button
-                variant="secondary"
-                loading={testing}
-                onClick={() => void sendTest()}
-                iconLeft={<Send aria-hidden className="size-4" />}
-              >
-                Send test email
-              </Button>
+          <Card>
+            <CardHeader title="Appearance" />
+            <CardBody className="pt-3">
+              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Color theme">
+                {THEME_OPTIONS.map(({ mode, label, icon: Icon }) => {
+                  const active = currentTheme === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => void update({ theme: mode })}
+                      aria-pressed={active}
+                      className={cn(
+                        'press flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-field border text-body-semibold',
+                        active
+                          ? 'border-accent/45 bg-accent-soft text-accent'
+                          : 'border-line-strong bg-surface text-muted hover:bg-raised hover:text-ink',
+                      )}
+                    >
+                      <Icon aria-hidden className="size-4" />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </CardBody>
           </Card>
         </div>

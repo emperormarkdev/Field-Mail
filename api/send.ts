@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createHash, timingSafeEqual } from 'node:crypto';
 import nodemailer from 'nodemailer';
 
 export const config = {
@@ -24,6 +23,9 @@ interface SendBody {
   to?: unknown;
   cc?: unknown;
   bcc?: unknown;
+  senderName?: unknown;
+  senderEmail?: unknown;
+  senderAppPassword?: unknown;
   subject?: unknown;
   html?: unknown;
   text?: unknown;
@@ -36,14 +38,6 @@ const seenKeys = new Map<string, number>();
 
 function error(res: VercelResponse, status: number, code: string, message: string, retryable: boolean) {
   res.status(status).json({ error: { code, message, retryable } });
-}
-
-/** Hash first so both buffers are the same length; comparison stays constant-time. */
-function keyMatches(supplied: string, expected: string): boolean {
-  if (!expected || !supplied) return false;
-  const a = createHash('sha256').update(supplied).digest();
-  const b = createHash('sha256').update(expected).digest();
-  return timingSafeEqual(a, b);
 }
 
 function isEmail(value: unknown): value is string {
@@ -72,37 +66,19 @@ function checkRateLimit(ip: string): boolean {
   return bucket.count <= RATE_LIMIT;
 }
 
-function allowedRecipients(): Set<string> | null {
-  const raw = process.env.ALLOWED_RECIPIENTS?.trim();
-  if (!raw) return null;
-  return new Set(
-    raw
-      .split(',')
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-function transporter() {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '');
+function createGmailTransport(user: string, rawPass: string) {
+  const pass = rawPass.replace(/\s/g, '');
   if (!user || !pass) return null;
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
     auth: { user, pass },
-    pool: true,
-    maxConnections: 2,
     connectionTimeout: 15_000,
     greetingTimeout: 10_000,
     socketTimeout: 20_000,
   });
 }
-
-// Reused across warm invocations; recreated if configuration changes.
-let cachedTransport: ReturnType<typeof transporter> = null;
-let cachedSignature = '';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -112,13 +88,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     error(res, 405, 'method_not_allowed', 'Only POST is allowed.', false);
-    return;
-  }
-
-  const accessKey = process.env.ACCESS_KEY;
-  const supplied = req.headers['x-access-key'];
-  if (!accessKey || typeof supplied !== 'string' || !keyMatches(supplied, accessKey)) {
-    error(res, 401, 'unauthorised', 'The access key is missing or incorrect.', false);
     return;
   }
 
@@ -155,10 +124,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (
     typeof reportId !== 'string' ||
-    reportId.length < 8 ||
+    reportId.length < 4 ||
     reportId.length > 100 ||
     typeof attemptId !== 'string' ||
-    attemptId.length < 8 ||
+    attemptId.length < 4 ||
     attemptId.length > 100 ||
     !Number.isInteger(partIndex) ||
     (partIndex as number) < 0 ||
@@ -180,21 +149,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ) {
     error(res, 400, 'invalid_payload', 'The report payload is missing required information.', false);
     return;
-  }
-
-  const allowlist = allowedRecipients();
-  if (allowlist) {
-    const everyone = [...to, ...cc, ...bcc];
-    if (everyone.some((address) => !allowlist.has(address))) {
-      error(
-        res,
-        403,
-        'recipient_not_allowed',
-        'One or more recipients are not on this app’s allowed list. Update ALLOWED_RECIPIENTS or choose another address.',
-        false,
-      );
-      return;
-    }
   }
 
   let pdfBuffer: Buffer;
@@ -233,7 +187,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Idempotency: retries reuse attemptId + partIndex; resends use a fresh attemptId.
   const dedupeKey = `${attemptId}:${partIndex}`;
   const previous = seenKeys.get(dedupeKey);
   if (previous && previous > Date.now()) {
@@ -248,22 +201,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   seenKeys.set(dedupeKey, Date.now() + DEDUPE_TTL_MS);
 
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
-  if (!user || !pass) {
+  // Use the visitor's own Gmail + App Password if provided, falling back to server env vars if configured
+  const userEmail = isEmail(raw.senderEmail) ? raw.senderEmail.trim().toLowerCase() : '';
+  const userPass =
+    typeof raw.senderAppPassword === 'string' ? raw.senderAppPassword.replace(/\s/g, '') : '';
+
+  const smtpUser = userEmail && userPass ? userEmail : (process.env.GMAIL_USER?.trim() || '');
+  const smtpPass = userEmail && userPass ? userPass : (process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, '') || '');
+
+  if (!smtpUser || !smtpPass) {
     seenKeys.delete(dedupeKey);
-    error(res, 500, 'mail_not_configured', 'Email is not configured on the server yet.', true);
+    error(
+      res,
+      400,
+      'missing_sender_credentials',
+      'Enter your Gmail address and 16-character Gmail App Password in Settings to send directly from your email.',
+      false,
+    );
     return;
   }
 
-  const signature = `${user}:${pass}`;
-  if (!cachedTransport || cachedSignature !== signature) {
-    cachedTransport = transporter();
-    cachedSignature = signature;
-  }
-  if (!cachedTransport) {
+  const transport = createGmailTransport(smtpUser, smtpPass);
+  if (!transport) {
     seenKeys.delete(dedupeKey);
-    error(res, 500, 'mail_not_configured', 'Email is not configured on the server yet.', true);
+    error(res, 400, 'missing_sender_credentials', 'Invalid Gmail credentials.', false);
     return;
   }
 
@@ -272,10 +233,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? pdf.filename.replace(/[^\w.\-]/g, '_').slice(0, 120)
       : 'fieldmail-report.pdf';
 
+  const senderName =
+    typeof raw.senderName === 'string'
+      ? raw.senderName.replace(/["<>]/g, '').trim().slice(0, 80)
+      : '';
+  const fromDisplay = senderName || 'Fieldmail';
+
   try {
-    await cachedTransport.sendMail({
-      from: `"Fieldmail" <${user}>`,
-      replyTo: user,
+    await transport.sendMail({
+      from: `"${fromDisplay}" <${smtpUser}>`,
+      replyTo: userEmail || smtpUser,
       to,
       cc,
       bcc,
@@ -299,14 +266,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       partCount,
     });
   } catch {
-    // A retry creates a new attempt id, so remove this key after a transport failure.
     seenKeys.delete(dedupeKey);
     error(
       res,
       502,
       'mail_failed',
-      'Gmail could not send this email. Check the App Password in the server settings.',
+      'Gmail could not send this email. Make sure your Gmail address and 16-character Gmail App Password in Settings are correct.',
       true,
     );
+  } finally {
+    transport.close();
   }
 }

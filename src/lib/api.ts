@@ -24,25 +24,21 @@ function isRetryable(status: number): boolean {
 
 export async function postPart(
   payload: SendPayload,
-  accessKey: string,
+  accessKey?: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!accessKey) {
-    throw new SendError('Add your access key in Settings before sending.', {
-      code: 'missing_access_key',
-      status: 0,
-      retryable: false,
-    });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (accessKey) {
+    headers['X-Access-Key'] = accessKey;
   }
 
   let response: Response;
   try {
     response = await fetch('/api/send', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Access-Key': accessKey,
-      },
+      headers,
       body: JSON.stringify(payload),
       signal,
     });

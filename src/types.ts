@@ -141,9 +141,12 @@ export interface SendPayload {
   to: string[];
   cc?: string[];
   bcc?: string[];
+  senderName?: string;
+  senderEmail?: string;
+  senderAppPassword?: string;
   subject: string;
   html: string;
   text?: string;
   pdf: { filename: string; base64: string };
-  photos?: Array<{ filename: string; base64: string }>;
+  photos?: Array<{ filename: string; base64?: string }>;
 }

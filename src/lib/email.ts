@@ -220,6 +220,9 @@ export async function buildParts(params: {
       to: report.recipients.to,
       cc: report.recipients.cc,
       bcc: report.recipients.bcc,
+      senderName: settings.myName.trim() || undefined,
+      senderEmail: settings.gmail.trim() || undefined,
+      senderAppPassword: settings.accessKey.trim() || undefined,
       subject: groups.length > 1 ? `${subject} (Part ${index + 1} of ${groups.length})` : subject,
       html: buildHtmlBody({
         report,
